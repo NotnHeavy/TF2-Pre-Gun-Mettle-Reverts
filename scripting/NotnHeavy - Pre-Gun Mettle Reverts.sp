@@ -2995,8 +2995,8 @@ void AfterClientDamaged(int victim, int attacker, int inflictor, float damage, i
         float newCharge = GetEntPropFloat(victim, Prop_Send, "m_flChargeMeter") - damage * 3;
         SetEntPropFloat(victim, Prop_Send, "m_flChargeMeter", newCharge < 0.00 ? 0.00 : newCharge);
     }
-    if (allPlayers[victim].FramesSinceEncounterWithFire == 0 && shared != Address_Null && !TF2_IsPlayerInCondition(victim, TFCond_FireImmune)) // Set 10s afterburn (or 6s with the Cow Mangler).
-        SDKCall(SDKCall_CTFPlayerShared_Burn, shared, attacker, weapon, allPlayers[victim].LastWeaponIgnite == 441 ? 6.00 : 10.00); // Using this instead of TF2_IgnitePlayer so I can actually pass through the weapon used as the pWeapon parameter.
+    if (allPlayers[victim].FramesSinceEncounterWithFire == 0 && shared != Address_Null && !TF2_IsPlayerInCondition(victim, TFCond_FireImmune) && allPlayers[victim].LastWeaponIgnite != 441) // Set 10s afterburn (don't do anything with the Cow Mangler so that it still does 12 ticks only.)
+        SDKCall(SDKCall_CTFPlayerShared_Burn, shared, attacker, weapon, 10.00); // Using this instead of TF2_IgnitePlayer so I can actually pass through the weapon used as the pWeapon parameter.
     if (allPlayers[victim].TicksSinceFeignReady == GetGameTickCount()) // Set the cloak meter to 100 when feigning.
         SetEntPropFloat(victim, Prop_Send, "m_flCloakMeter", 100.00);
 
