@@ -2143,10 +2143,6 @@ public void OnEntityCreated(int entity, const char[] class)
             else if (StrEqual(class, "tf_weapon_sniperrifle_decap"))
                 DHookEntity(DHooks_CTFSniperRifleDecap_SniperRifleChargeRateMod, false, entity, _, GetBazaarBargainChargeRate);
         }
-
-        // Modelling. (Actually make sure that other users can see the model...)
-        if (HasEntProp(entity, Prop_Send, "m_bValidatedAttachedEntity"))
-            SetEntProp(entity, Prop_Send, "m_bValidatedAttachedEntity", 1);
     }
     else if (StrEqual(class, "tf_projectile_ball_ornament"))
         DHookEntity(DHooks_CTFBall_Ornament_Explode, false, entity, _, OrnamentExplode);
