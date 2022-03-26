@@ -6,6 +6,9 @@ This is a SourceMod plugin that reverts weapon attributes to just before Gun Met
 
 You may always look up the attributes of weapons before Gun Mettle, but just a brief analysis: The TF2 Gun Mettle update was the first major update that marked a significant turn in weapon functionality. Some weapons got nerfs, some weapons got buffs, etc etc. Tough Break also brought a lot of changes to weapons, mostly nerfs instead however. This is the main reason why I picked before Gun Mettle as the timestamp of this project, so you could get a proper taste of old TF2, while also being able to experience nearly every weapon that TF2 still has (only the Dragon's Fury, Second Banana, Thermal Thruster and Gas Passer didn't exist before Gun Mettle).
 
+## Installation.
+Head over to the releases tab and download the most recent version. This plugin has been developed with SourceMod 1.10, keep that in mind. Once you have downloaded your ZIP, simply extract the addons folder out of it and move it to your server's /tf folder. That's pretty much it.
+
 ## Things that have not been reverted.
 
 I will say however, that flame mechanics are very difficult to look into and so I will not be looking into reverting them for the time being. It may not sound like much, but trust me, old flamethrowers were cursed as hell. I still managed to tune afterburn at least.
