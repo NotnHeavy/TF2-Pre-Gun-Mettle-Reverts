@@ -30,3 +30,5 @@ This plugin has been influenced not only by my somehow massive interest in TF2's
 
 ## Credits.
 - Thank you to nosoop for providing samples of code (functions used for memory management in this case) with your stocksoup plugin (https://github.com/nosoop/stocksoup)!
+
+Project on AlliedModders: https://forums.alliedmods.net/showthread.php?p=2775250
