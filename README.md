@@ -23,5 +23,8 @@ This plugin has been influenced not only by my somehow massive interest in TF2's
 - asherkin's TF2Items extension.
 - Dr!fter's DHooks extension (already a part of SourceMod since version 1.11). You'll need a version that has support for detours.
 
+## Cvars:
+- **notnheavy_gunmettle_reverts_reject_newitems 0-1 (defaults to 1)** - block weapons that were not present before Gun Mettle.
+
 ## Credits.
 - Thank you to nosoop for providing samples of code (functions used for memory management in this case) with your stocksoup plugin (https://github.com/nosoop/stocksoup)!
