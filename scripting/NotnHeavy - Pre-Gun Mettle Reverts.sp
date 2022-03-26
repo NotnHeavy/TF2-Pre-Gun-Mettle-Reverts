@@ -158,6 +158,9 @@ enum struct Player
     // Pretty Boy's Pocket Pistol.
     int TicksSinceFallDamage;
 
+    // BONK! Atomic Punch.
+    int TicksSinceBonkEnd;
+
     // Crit-a-Cola.
     int TicksSincePrimaryAttack;
 
@@ -2417,15 +2420,6 @@ public void OnGameFrame()
     }
 }
 
-// TODO: change these condition functions into DHooks detours.
-public void TF2_OnConditionRemoved(int client, TFCond condition)
-{
-    if (condition == TFCond_Bonked && TF2_IsPlayerInCondition(client, TFCond_Dazed)) // Remove BONK! slowdown.
-        TF2_RemoveCondition(client, TFCond_Dazed);
-    else if (condition == TFCond_Parachute) // Used to check for parachute redeployment.
-        allPlayers[client].TimeSinceDeployment = GetGameTime();
-}
-
 // prevent shortstop shove with this.
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3], int& weapon, int& subtype, int& cmdnum, int& tickcount, int& seed, int mouse[2])
 {
@@ -3482,6 +3476,8 @@ MRESReturn AddCondition(Address thisPointer, DHookParam parameters)
         return MRES_Supercede;
     else if (condition == TFCond_Slowed && GetPlayerWeaponSlot(client, TFWeaponSlot_Primary) == GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon")) // Modify checks for the Sydney Sleeper.
         allPlayers[client].TimeSinceScoping = GetGameTime();
+    else if (condition == TFCond_Dazed && allPlayers[client].TicksSinceBonkEnd == GetGameTickCount()) // Do not suffer from BONK! slowdown.
+        return MRES_Supercede;
     return MRES_Ignored;
 }
 
@@ -3503,6 +3499,10 @@ MRESReturn RemoveCondition(Address thisPointer, DHookParam parameters)
         if (GetEntPropFloat(client, Prop_Send, "m_flCloakMeter") > 40.00) // Set the cloak meter to 40% when ending feign death.
             SetEntPropFloat(client, Prop_Send, "m_flCloakMeter", 40.00);
     }
+    else if (condition == TFCond_Parachute) // Used to check for parachute redeployment.
+        allPlayers[client].TimeSinceDeployment = GetGameTime();
+    else if (condition == TFCond_Bonked) // Checks for BONK! slowdown.
+        allPlayers[client].TicksSinceBonkEnd = GetGameTickCount();
     return MRES_Ignored;
 }
 
