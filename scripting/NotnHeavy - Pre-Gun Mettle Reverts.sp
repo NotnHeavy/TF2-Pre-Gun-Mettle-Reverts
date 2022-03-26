@@ -87,9 +87,6 @@
 
 #define MAX_HEAD_BONUS 6
 
-// I'll make this into a dictionary later.
-//#define AMBASSADOR_MODEL "models\\weapons\\c_models\\c_revolver\\c_revolver.mdl"
-
 #define PLUGIN_NAME "NotnHeavy - Pre-Gun Mettle Reverts"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1866,7 +1863,7 @@ int DoesPlayerHaveItem(int player, int index)
     for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
     {
         int entity = allPlayers[player].Weapons[i];
-        if (IsValidEntity(entity) && GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") == index)
+        if (IsValidEntity(entity) && HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") && GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") == index)
             return entity;
     }
     return 0;
