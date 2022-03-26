@@ -101,7 +101,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.0",
+    version = "1.01",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -1866,7 +1866,7 @@ int DoesPlayerHaveItem(int player, int index)
     for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
     {
         int entity = allPlayers[player].Weapons[i];
-        if (IsValidEntity(entity) && HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") && GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") == index)
+        if (IsValidEntity(entity) && GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") == index)
             return entity;
     }
     return 0;
@@ -2027,59 +2027,34 @@ public Action ClientDeath(Event event, const char[] name, bool dontBroadcast)
 // When a player spawns in or touches a resupply locker.
 public void PostClientInventoryReset(Event event, const char[] name, bool dontBroadcast)
 {
-    // Max health changes.
+    // Reset some player data.
     int client = GetClientOfUserId(event.GetInt("userid"));
-    DataPack data = new DataPack();
-    data.WriteCell(client);
-    data.WriteCell(true);
-    RequestFrame(ResetHealth, data);
     allPlayers[client].SpreadRecovery = 0;
+
+    // Structurise the player's weapon list.
+    for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
+        allPlayers[client].Weapons[i] = 0;
+    for (int entity = MAXPLAYERS; entity < MAX_ENTITY_COUNT; ++entity)
+    {
+        if (IsValidEntity(entity) && (StrContains(allEntities[entity].Class, "tf_weapon") != -1 || StrContains(allEntities[entity].Class, "tf_wearable") != -1) && GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
+        {
+            allEntities[entity].Owner = client;
+            for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
+            {
+                if (allPlayers[client].Weapons[i] == 0)
+                {
+                    allPlayers[client].Weapons[i] = entity;
+                    break;
+                }
+            }
+        }
+    }
 }
+
 
 //////////////////////////////////////////////////////////////////////////////
 // NEXT-FRAME EVENTS                                                        //
 //////////////////////////////////////////////////////////////////////////////
-
-void ResetHealth(DataPack data)
-{
-    data.Reset();
-    int client = data.ReadCell();
-    bool waitNext = data.ReadCell();
-    if (waitNext)
-    {
-        data.Reset();
-        data.WriteCell(client);
-        data.WriteCell(false); // Wait another frame.
-        RequestFrame(ResetHealth, data);
-        return;
-    }
-    if (IsClientInGame(client))
-        SetEntityHealth(client, allPlayers[client].MaxHealth);
-    delete data;
-}
-
-void FrameAfterEntitySpawn(int entity)
-{
-    if (IsValidEntity(entity) && HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex")) // Weapons.
-    {
-        int owner = GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity");
-        allEntities[entity].Owner = owner;
-        if (owner < 1)
-            return;
-        for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
-        {
-            if (allPlayers[owner].Weapons[i] == 0)
-            {
-                allPlayers[owner].Weapons[i] = entity;
-                break;
-            }
-        }
-    }
-    else if (StrEqual(allEntities[entity].Class, "tf_projectile_stun_ball")) // Sandman recharge.
-    {
-        //SetEntPropFloat(DoesPlayerHaveItem(GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity"), 44), Prop_Send, "m_flEffectBarRegenTime", GetGameTime() + 15);
-    }
-}
 
 void SetSpreadInaccuracy(int client)
 {
@@ -2116,7 +2091,6 @@ public void OnEntityCreated(int entity, const char[] class)
     if (entity <= MaxClients)
         return;
     allEntities[entity].SpawnTimestamp = GetGameTime();
-    allEntities[entity].Present = true;
     strcopy(allEntities[entity].Class, MAX_NAME_LENGTH, class);
 
     if (HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex")) // Any wearable.
@@ -2172,27 +2146,6 @@ public void OnEntityCreated(int entity, const char[] class)
 
     SDKHook(entity, SDKHook_Spawn, EntitySpawn); // Used for when next frame calls aren't needed.
     SDKHook(entity, SDKHook_Touch, EntityTouch);
-    RequestFrame(FrameAfterEntitySpawn, entity); // Call on next frame for things that won't work on the same frame, E.G. owner property setting for weapons.
-}
-
-public void OnEntityDestroyed(int entity)
-{
-    if (entity > MaxClients && entity < MAX_ENTITY_COUNT && allEntities[entity].Present == true)
-        allEntities[entity].Present = false;
-    if (IsValidEntity(entity) && HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex"))
-    {
-        int owner = allEntities[entity].Owner;
-        if (owner < 1)
-            return;
-        for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
-        {
-            if (allPlayers[owner].Weapons[i] == entity)
-            {
-                allPlayers[owner].Weapons[i] = 0;
-                break;
-            }
-        }
-    }
 }
 
 public void OnGameFrame()
