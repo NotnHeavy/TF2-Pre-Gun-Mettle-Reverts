@@ -13,6 +13,8 @@ Head over to the releases tab and download the most recent version. This plugin 
 
 I will say however, that flame mechanics are very difficult to look into and so I will not be looking into reverting them for the time being. It may not sound like much, but trust me, old flamethrowers were cursed as hell. I still managed to tune afterburn at least.
 
+Airblast mechanics are mostly reverted (tf_airblast_cray 0), however the hitboxes and target auto-aim (the direction your projectiles went used to be influenced by which opponent you were looking at as well) have not been reverted either since I'm not sure what to do about those either. I'll look into it though.
+
 Currently, I'm not considering weapon models/weapon sounds at the moment either. I'm still not fully confident with tuning weapon models and I only just started looking into FastDL too. I'll get around this eventually!
 
 ## Influences
