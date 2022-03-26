@@ -21,7 +21,7 @@ This plugin has been influenced not only by my somehow massive interest in TF2's
 
 ## Dependencies:
 - asherkin's TF2Items extension.
-- Dr!fter's DHooks extension (already a part of SourceMod since version 1.1). You'll need a version that has support for detours.
+- Dr!fter's DHooks extension (already a part of SourceMod since version 1.11). You'll need a version that has support for detours.
 
 ## Credits.
 - Thank you to nosoop for providing samples of code (functions used for memory management in this case) with your stocksoup plugin (https://github.com/nosoop/stocksoup)!
