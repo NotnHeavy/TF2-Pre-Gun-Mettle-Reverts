@@ -87,6 +87,10 @@
 
 #define MAX_HEAD_BONUS 6
 
+#define FSOLID_USE_TRIGGER_BOUNDS (1 << 7) // Uses a special trigger bounds separate from the normal OBB.
+
+#define ACT_ITEM2_VM_PRIMARYATTACK 1652 // ai_activity.h
+
 #define PLUGIN_NAME "NotnHeavy - Pre-Gun Mettle Reverts"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -98,7 +102,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.01",
+    version = "1.1",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -228,6 +232,9 @@ enum struct Player
 
     // Conniver's Kunai.
     int OldHealth;
+
+    // Righteous Bison.
+    float TimeSinceLastBisonHit;
 }
 enum struct Entity
 {
@@ -704,7 +711,10 @@ public void OnPluginStart()
     for (int i = 1; i <= MaxClients; ++i)
     {
         if (IsClientInGame(i))
+        {
             OnClientPutInServer(i);
+            StructuriseWeaponList(i);
+        }
     }
 
     HookEvent("player_spawn", ClientSpawn);
@@ -1905,6 +1915,32 @@ int GetWeaponAmmoReserve(int entity, int ammoType = -1)
     return GetEntProp(allEntities[entity].Owner, Prop_Send, "m_iAmmo", 4, ammoType);
 }
 
+void StructuriseWeaponList(int client)
+{
+    for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
+        allPlayers[client].Weapons[i] = 0;
+    for (int entity = MAXPLAYERS; entity < MAX_ENTITY_COUNT; ++entity)
+    {
+        if (IsValidEntity(entity))
+        {
+            char class[MAX_NAME_LENGTH]; // This function is also called on plugin start, so this is just to be safe.
+            GetEntityClassname(entity, class, MAX_NAME_LENGTH);
+            if ((StrContains(class, "tf_weapon") != -1 || StrContains(class, "tf_wearable") != -1) && GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
+            {
+                allEntities[entity].Owner = client;
+                for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
+                {
+                    if (allPlayers[client].Weapons[i] == 0)
+                    {
+                        allPlayers[client].Weapons[i] = entity;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // WEAPON FUNCTIONALITY                                                     //
 //////////////////////////////////////////////////////////////////////////////
@@ -2029,23 +2065,7 @@ public void PostClientInventoryReset(Event event, const char[] name, bool dontBr
     allPlayers[client].SpreadRecovery = 0;
 
     // Structurise the player's weapon list.
-    for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
-        allPlayers[client].Weapons[i] = 0;
-    for (int entity = MAXPLAYERS; entity < MAX_ENTITY_COUNT; ++entity)
-    {
-        if (IsValidEntity(entity) && (StrContains(allEntities[entity].Class, "tf_weapon") != -1 || StrContains(allEntities[entity].Class, "tf_wearable") != -1) && GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
-        {
-            allEntities[entity].Owner = client;
-            for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
-            {
-                if (allPlayers[client].Weapons[i] == 0)
-                {
-                    allPlayers[client].Weapons[i] = entity;
-                    break;
-                }
-            }
-        }
-    }
+    StructuriseWeaponList(client);
 }
 
 
@@ -2141,7 +2161,7 @@ public void OnEntityCreated(int entity, const char[] class)
     else if (StrEqual(class, "obj_attachment_sapper"))
         DHookEntity(DHooks_CObjectSapper_FinishedBuilding, false, entity, _, PlantSapperOnBuilding);
 
-    SDKHook(entity, SDKHook_Spawn, EntitySpawn); // Used for when next frame calls aren't needed.
+    SDKHook(entity, SDKHook_SpawnPost, EntitySpawn);
     SDKHook(entity, SDKHook_Touch, EntityTouch);
 }
 
@@ -2434,6 +2454,15 @@ Action EntitySpawn(int entity)
             }
         }
     }
+    else if (StrEqual(allEntities[entity].Class, "tf_projectile_energy_ring")) // Set the hitbox size of the Bison/Pomson projectiles.
+    {
+        float mins[3] = { -2.0, -2.0, -10.0 };
+        float maxs[3] = { 2.0, 2.0, 10.0 };
+        SetEntPropVector(entity, Prop_Send, "m_vecMaxs", maxs);
+        SetEntPropVector(entity, Prop_Send, "m_vecMins", mins);
+        SetEntProp(entity, Prop_Send, "m_usSolidFlags", GetEntProp(entity, Prop_Send, "m_usSolidFlags") | FSOLID_USE_TRIGGER_BOUNDS);
+        SetEntProp(entity, Prop_Send, "m_triggerBloat", 24);
+    }
     return Plugin_Continue;
 }
 
@@ -2441,21 +2470,22 @@ Action EntityTouch(int entity, int other)
 {
     if (StrContains(allEntities[entity].Class, "tf_projectile_") == 0)
     {
-        // Allow the Pomson projectile to go through teammates and teammate buildings.
-        if 
-        (
-            StrEqual(allEntities[entity].Class, "tf_projectile_energy_ring") && GetEntProp(GetEntPropEnt(entity, Prop_Send, "m_hLauncher"), Prop_Send, "m_iItemDefinitionIndex") == 588 && // Check that it's the Pomson projectile.
-            (
-                // Check if it's a teammate.
-                (
-                    other > 0 && other <= MaxClients && TF2_GetClientTeam(other) == TF2_GetClientTeam(GetEntPropEnt(entity, Prop_Data, "m_hOwnerEntity"))
-                )
-                ||
-                // Check if it's a building
-                HasEntProp(other, Prop_Send, "m_hBuilder")
-            )
-        )
-            return Plugin_Handled;
+        if (StrEqual(allEntities[entity].Class, "tf_projectile_energy_ring"))
+        {
+            // If the teammate has a Huntsman, set it alight.
+            bool isTeammate = false;
+            if (other > 0 && other <= MaxClients && TF2_GetClientTeam(other) == TF2_GetClientTeam(GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity")))
+            {
+                isTeammate = true;
+                int weapon = DoesPlayerHaveItemByClass(other, "tf_weapon_compound_bow");
+                if (weapon == GetEntPropEnt(other, Prop_Send, "m_hActiveWeapon"))
+                    SetEntProp(weapon, Prop_Send, "m_bArrowAlight", true);
+            }
+
+            // Allow the Pomson projectile to go through teammates and teammate buildings.
+            if (GetEntProp(GetEntPropEnt(entity, Prop_Send, "m_hLauncher"), Prop_Send, "m_iItemDefinitionIndex") == 588 && (isTeammate || HasEntProp(other, Prop_Send, "m_hBuilder")))
+                return Plugin_Handled;
+        }
 
         if (other > 0 && other <= MaxClients)
         {
@@ -2504,7 +2534,7 @@ Action BuildingDamaged(int victim, int& attacker, int& inflictor, float& damage,
         }
         if (index == 442) // Righteous Bison damage.
         {
-            damage = 3.2;
+            damage = 3.2; // 16 * 0.2
             returnValue =  Plugin_Changed;
         }
         if (index == 307) // Caber damage.
@@ -2637,8 +2667,15 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
         }
         if (index == 442) // Righteous Bison damage. I doubt this is exact but it's still pretty accurate as far as I'm aware.
         {
+            // Damage ticks.
+            //if (GetGameTime() - allPlayers[victim].TimeSinceLastBisonHit < 0.045)
+            //    return Plugin_Stop;
+            //allPlayers[victim].TimeSinceLastBisonHit = GetGameTime();
+
+            // Damage numbers.
             damagetype ^= DMG_USEDISTANCEMOD; // Do not use internal rampup/falloff.
             damage = 16.00 * RemapValClamped(min(0.35, GetGameTime() - allEntities[allPlayers[victim].MostRecentProjectileEncounter].SpawnTimestamp), 0.35 / 2, 0.35, 1.25, 0.75); // Deal 16 base damage with 125% rampup, 75% falloff.
+
             returnValue = Plugin_Changed;
         }
         if (index == 588) // Pomson damage (uses same rampup/falloff system as the Bison) and Medic/Spy Uber/Cloak drain. Welcome back, fun police.
