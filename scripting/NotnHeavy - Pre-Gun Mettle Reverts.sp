@@ -1915,28 +1915,42 @@ int GetWeaponAmmoReserve(int entity, int ammoType = -1)
     return GetEntProp(allEntities[entity].Owner, Prop_Send, "m_iAmmo", 4, ammoType);
 }
 
+void RegisterToWeaponList(int client, int entity)
+{
+    allEntities[entity].Owner = client;
+    for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
+    {
+        if (allPlayers[client].Weapons[i] == 0)
+        {
+            allPlayers[client].Weapons[i] = entity;
+            break;
+        }
+    }
+}
+
 void StructuriseWeaponList(int client)
 {
+    // Reset weapon structure.
     for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
         allPlayers[client].Weapons[i] = 0;
+
+    // Iterate through weapons.
+    for (int i = TFWeaponSlot_Primary; i <= TFWeaponSlot_Item2; ++i)
+    {
+        int weapon = GetPlayerWeaponSlot(client, i);
+        if (weapon != -1)
+            RegisterToWeaponList(client, weapon);
+    }
+
+    // Iterate through wearables.
     for (int entity = MAXPLAYERS; entity < MAX_ENTITY_COUNT; ++entity)
     {
         if (IsValidEntity(entity))
         {
             char class[MAX_NAME_LENGTH]; // This function is also called on plugin start, so this is just to be safe.
             GetEntityClassname(entity, class, MAX_NAME_LENGTH);
-            if ((StrContains(class, "tf_weapon") != -1 || StrContains(class, "tf_wearable") != -1) && GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
-            {
-                allEntities[entity].Owner = client;
-                for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
-                {
-                    if (allPlayers[client].Weapons[i] == 0)
-                    {
-                        allPlayers[client].Weapons[i] = entity;
-                        break;
-                    }
-                }
-            }
+            if (StrContains(class, "tf_wearable") != -1 && GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
+                RegisterToWeaponList(client, entity);
         }
     }
 }
@@ -3001,6 +3015,8 @@ void AfterClientSwitchedWeapons(int client, int weapon)
 
 Action ClientGetMaxHealth(int client, int& maxhealth)
 {
+    if (allPlayers[client].Weapons[0] == 0) // Final weapon structure check.
+        StructuriseWeaponList(client);
     for (int weapon = 0; weapon < sizeof(weaponHealthModifiers); ++weapon)
     {
         if (DoesPlayerHaveItem(client, weaponHealthModifiers[weapon][0]))
