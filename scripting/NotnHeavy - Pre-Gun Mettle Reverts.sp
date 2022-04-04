@@ -91,6 +91,10 @@
 
 #define ACT_ITEM2_VM_PRIMARYATTACK 1652 // ai_activity.h
 
+#define EF_NODRAW (1 << 5)
+
+#define MODEL_PRECACHE_TABLENAME "modelprecache"
+
 #define PLUGIN_NAME "NotnHeavy - Pre-Gun Mettle Reverts"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -149,6 +153,7 @@ enum struct Player
     int HealthBeforeKill; // For Conniver's Kunai backstabs.
     int TicksSinceProjectileEncounter;
     int MostRecentProjectileEncounter;
+    int OldHealth;
     
     int Weapons[MAX_WEAPON_COUNT];
 
@@ -230,14 +235,19 @@ enum struct Player
     int TicksSinceFeignReady;
     float DamageTakenDuringFeign;
 
-    // Conniver's Kunai.
-    int OldHealth;
+    // Weapon models.
+    int CurrentViewmodel;
+    int CurrentArmsViewmodel;
+    int CurrentWorldmodel;
+    bool UsingCustomModels;
 
-    // Righteous Bison.
-    float TimeSinceLastBisonHit;
+    // Rocket Jumper.
+    int WeaponBlastJumpedWith;
 }
 enum struct Entity
 {
+    int OriginalTF2ItemsIndex;
+
     // Construction boosts. Would make this a separate enum struct but enum structs are one-dimensional.
     float ConstructionBoostExpiryTimes[MAXPLAYERS + 1];
     float ConstructionBoosts[MAXPLAYERS + 1];
@@ -266,9 +276,13 @@ enum struct Entity
 enum struct ModelInformation
 {
     char Model[PLATFORM_MAX_PATH];
+    char Texture[PLATFORM_MAX_PATH];
     
+    bool ShowWhileTaunting;
     int ItemDefinitionIndex;
     int Cache;
+    
+    char FullModel[PLATFORM_MAX_PATH];
 }
 enum struct TF2ConVar
 {
@@ -307,7 +321,7 @@ int chargeOnChargeKillWeapons[][] =
 };
 ModelInformation customWeapons[] =
 {
-    { "weapons\\c_models\\c_rocketjumper\\c_rocketjumper.mdl", -1, 0 } // Rocket Jumper
+    { "models\\weapons\\c_models\\c_rocketjumper\\c_oldrocketjumper", "materials\\models\\weapons\\c_items\\c_rocketjumper", false, 237 } // Rocket Jumper
 };
 TF2ConVar defaultConVars[] =
 { 
@@ -326,6 +340,35 @@ int resistanceMapping[] =
     DMG_BULLET | DMG_BUCKSHOT,
     DMG_BLAST,
     DMG_IGNITE | DMG_BURN
+};
+char modelExtensions[][] =
+{
+    ".dx80.vtx",
+    ".dx90.vtx",
+    ".phy",
+    ".sw.vtx",
+    ".vvd"
+};
+char textureExtensions[][] =
+{
+    ".vmt",
+    ".vtf"
+};
+char armsViewmodels[][] = 
+{
+    // Gunslinger arms viewmodels.
+    "models\\weapons\\c_models\\c_engineer_gunslinger.mdl",
+
+    // Main arms viewmodels.
+    "models\\weapons\\c_models\\c_scout_arms.mdl",
+    "models\\weapons\\c_models\\c_sniper_arms.mdl",
+    "models\\weapons\\c_models\\c_soldier_arms.mdl",
+    "models\\weapons\\c_models\\c_demo_arms.mdl",
+    "models\\weapons\\c_models\\c_medic_arms.mdl",
+    "models\\weapons\\c_models\\c_heavy_arms.mdl",
+    "models\\weapons\\c_models\\c_pyro_arms.mdl",
+    "models\\weapons\\c_models\\c_spy_arms.mdl",
+    "models\\weapons\\c_models\\c_engineer_arms.mdl"
 };
 
 DHookSetup DHooks_GetRadius;
@@ -383,6 +426,7 @@ DHookSetup DHooks_CTFProjectile_Arrow_BuildingHealingArrow;
 DHookSetup DHooks_CTFGameRules_ApplyOnDamageModifyRules;
 
 Handle SDKCall_CAmmoPack_GetPowerupSize;
+Handle SDKCall_CTFPlayer_EquipWearable;
 Handle SDKCall_CTFItem_GetItemID;
 Handle SDKCall_CWeaponMedigun_CanAttack;
 Handle SDKCall_CBaseObject_DetonateObject;
@@ -417,6 +461,8 @@ const int ShortCircuit_MaxCollectedEntities = 64;
 int ShortCircuit_CurrentCollectedEntities = 0;
 
 bool BypassRoundTimerChecks = false;
+
+int OriginalTF2ItemsIndex = -1;
 
 //////////////////////////////////////////////////////////////////////////////
 // TF2 code                                                                 //
@@ -708,17 +754,9 @@ public void OnPluginStart()
 {
     LoadTranslations("common.phrases");
 
-    for (int i = 1; i <= MaxClients; ++i)
-    {
-        if (IsClientInGame(i))
-        {
-            OnClientPutInServer(i);
-            StructuriseWeaponList(i);
-        }
-    }
-
     HookEvent("player_spawn", ClientSpawn);
     HookEvent("player_death", ClientDeath, EventHookMode_Pre);
+    HookEvent("rocket_jump", ClientRocketJumped, EventHookMode_Pre);
     HookEvent("post_inventory_application", PostClientInventoryReset);
 
     AddNormalSoundHook(SoundPlayed);
@@ -823,16 +861,14 @@ public void OnPluginStart()
     DHookEnableDetour(DHooks_CTFGameRules_ApplyOnDamageModifyRules, false, ApplyDamageRules);
 
     // SDKCall.
-    /*
-    StartPrepSDKCall(SDKCall_Player);
-    PrepSDKCall_SetFromConf(config, SDKConf_Virtual, "CTFPlayer::EquipWearable");
-    PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);
-    SDKCall_CTFPlayer_EquipWearable = EndPrepSDKCall();
-    */
     StartPrepSDKCall(SDKCall_Entity);
     PrepSDKCall_SetFromConf(config, SDKConf_Virtual, "CAmmoPack::GetPowerupSize");
     PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
     SDKCall_CAmmoPack_GetPowerupSize = EndPrepSDKCall();
+    StartPrepSDKCall(SDKCall_Player);
+    PrepSDKCall_SetFromConf(config, SDKConf_Virtual, "CTFPlayer::EquipWearable");
+    PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);
+    SDKCall_CTFPlayer_EquipWearable = EndPrepSDKCall();
     StartPrepSDKCall(SDKCall_Entity);
     PrepSDKCall_SetFromConf(config, SDKConf_Virtual, "CTFItem::GetItemID");
     PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
@@ -916,6 +952,18 @@ public void OnPluginStart()
             OnEntityCreated(i, class);
         }
     }
+    for (int i = 1; i <= MaxClients; ++i)
+    {
+        if (IsClientInGame(i))
+        {
+            OnClientPutInServer(i);
+            if (IsPlayerAlive(i))
+            {
+                StructuriseWeaponList(i);
+                RequestFrame(NextFrameApplyViewmodelsToPlayer, i);
+            }
+        }
+    }
 
     PrintToServer("--------------------------------------------------------\n\"%s\" has loaded.\n--------------------------------------------------------", PLUGIN_NAME);
 }
@@ -936,11 +984,23 @@ public void OnMapStart()
     }
     for (int i = 0; i < sizeof(customWeapons); ++i)
     {
-        customWeapons[i].Cache = PrecacheModel(customWeapons[i].Model);
-        AddFileToDownloadsTable(customWeapons[i].Model);
+        Format(tempPath, PLATFORM_MAX_PATH, "%s.mdl", customWeapons[i].Model);
+        customWeapons[i].Cache = PrecacheModel(tempPath);
+        customWeapons[i].FullModel = tempPath;
+        AddFileToDownloadsTable(tempPath);
+        for (int extension = 0; extension < sizeof(modelExtensions); ++extension)
+        {
+            Format(tempPath, PLATFORM_MAX_PATH, "%s%s", customWeapons[i].Model, modelExtensions[extension]);
+            AddFileToDownloadsTable(tempPath);
+        }
+        for (int extension = 0; extension < sizeof(textureExtensions); ++extension)
+        {
+            Format(tempPath, PLATFORM_MAX_PATH, "%s%s", customWeapons[i].Texture, textureExtensions[extension]);
+            AddFileToDownloadsTable(tempPath);
+        }
     }
-    //AddFileToDownloadsTable(AMBASSADOR_MODEL);
-    //AmbassadorModel = PrecacheModel(AMBASSADOR_MODEL);
+    for (int i = 0; i < sizeof(armsViewmodels); ++i)
+        PrecacheModel(armsViewmodels[i]);
 }
 
 public void OnPluginEnd()
@@ -949,6 +1009,11 @@ public void OnPluginEnd()
         WriteToValue(SpyClassData + TFPlayerClassData_t_m_flMaxSpeed, 320.00);
     for (int i = 0; i < sizeof(defaultConVars); ++i)
         SetTF2ConVarValue(defaultConVars[i].Name, defaultConVars[i].DefaultValue);
+    for (int i = 1; i <= MaxClients; ++i)
+    {
+        if (IsClientInGame(i) && IsPlayerAlive(i))
+            RemoveViewmodelsFromPlayer(i);
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -969,6 +1034,7 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
     newItem = TF2Items_CreateItem(OVERRIDE_ATTRIBUTES | PRESERVE_ATTRIBUTES);
     TF2Items_SetAttribute(newItem, 0, 773, 1.34); // This weapon deploys 1.34% slower. 0.5s * 1.34 = 0.67s, nearly the same as pre-Tough Break switch speed.
     TF2Items_SetNumAttributes(newItem, 1);
+    OriginalTF2ItemsIndex = -1;
 
     // Scout.
     {
@@ -1091,6 +1157,20 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
 
                 // Healing is dealt with separately; the heal on hit attribute ramp up on damage.
             }
+            else if (index == 237) // Rocket Jumper.
+            {
+                // Apply new attributes.
+                TF2Items_SetFlags(newItem, OVERRIDE_ATTRIBUTES | OVERRIDE_ITEM_DEF);
+                TF2Items_SetItemIndex(newItem, 18);
+                TF2Items_SetAttribute(newItem, 2, 1, 0.00); // -100% damage penalty
+                TF2Items_SetAttribute(newItem, 3, 15, 0.00); // No random critical hits
+                TF2Items_SetAttribute(newItem, 4, 76, 3.00); // +200% max primary ammo on wearer
+                TF2Items_SetAttribute(newItem, 5, 400, 1.00); // Wearer cannot carry the intelligence briefcase or PASS Time JACK
+
+                TF2Items_SetNumAttributes(newItem, 6);
+
+                OriginalTF2ItemsIndex = 237; // i will have not taken this path if it weren't for the bloody client prediction issues with weapon sounds. my best workaround is making the rocket jumper the stock rocket launcher in disguise.
+            }
             else if (index == 414) // Liberty Launcher.
             {
                 // Remove old attributes.
@@ -1141,7 +1221,7 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
             {
                 // Remove old attributes.
                 TF2Items_SetAttribute(newItem, 1, 329, 1.00); // -0% reduction in airblast vulnerability
-                TF2Items_SetAttribute(newItem, 2, 610, 1.00); // 0% increased air control when blast jumping.
+                TF2Items_SetAttribute(newItem, 2, 610, 0.00); // 0% increased air control when blast jumping.
 
                 TF2Items_SetNumAttributes(newItem, 3);
             }
@@ -1873,7 +1953,7 @@ int DoesPlayerHaveItem(int player, int index)
     for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
     {
         int entity = allPlayers[player].Weapons[i];
-        if (IsValidEntity(entity) && HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") && GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") == index)
+        if (IsValidEntity(entity) && HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") && GetWeaponIndex(entity) == index)
             return entity;
     }
     return 0;
@@ -1959,6 +2039,13 @@ void StructuriseWeaponList(int client)
 // WEAPON FUNCTIONALITY                                                     //
 //////////////////////////////////////////////////////////////////////////////
 
+int GetWeaponIndex(int weapon)
+{
+    if (!IsValidEntity(weapon) || !HasEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex"))
+        return -1;
+    return allEntities[weapon].OriginalTF2ItemsIndex != -1 ? allEntities[weapon].OriginalTF2ItemsIndex : GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
+}
+
 float ApplyRadiusDamage(int victim, float damageposition[3], float radius, float damage, float rampup, float falloff, bool center = true)
 {
     // Create vectors.
@@ -2027,6 +2114,121 @@ int GetFeignBuffsEnd(int client)
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// VIEWMODELS                                                               //
+//////////////////////////////////////////////////////////////////////////////
+
+int CreateWearable(bool createViewmodel = false)
+{
+    int wearable = CreateEntityByName(createViewmodel ? "tf_wearable_vm" : "tf_wearable");
+    SetEntProp(wearable, Prop_Send, "m_iItemDefinitionIndex", 65535);
+    DispatchSpawn(wearable);
+    return wearable;
+}
+void ApplyViewmodelsToPlayer(int client)
+{
+    RemoveViewmodelsFromPlayer(client);
+
+    int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+    if (!IsValidEntity(weapon))
+        return;
+    
+    int index = GetWeaponIndex(weapon);
+    for (int i = 0; i < sizeof(customWeapons); ++i)
+    {
+        if (index == customWeapons[i].ItemDefinitionIndex)
+        {
+            // Create the new worldmodel.
+            int worldmodel = CreateWearable();
+            SetEntProp(worldmodel, Prop_Send, "m_bValidatedAttachedEntity", true); // JIOFSDIOJSPFKFDIPOOFIKPASLJAFMIOFSAJOFASJOFSJPISFAJKPFASD
+            SetEntityModel(worldmodel, customWeapons[i].FullModel);
+            SDKCall(SDKCall_CTFPlayer_EquipWearable, client, worldmodel);
+            allPlayers[client].CurrentWorldmodel = worldmodel;
+
+            // Create the new viewmodel.
+            int viewmodel = CreateWearable(true);
+            SetEntityModel(viewmodel, customWeapons[i].FullModel);
+            SDKCall(SDKCall_CTFPlayer_EquipWearable, client, viewmodel);
+            allPlayers[client].CurrentViewmodel = viewmodel;
+
+            // Create the new arms viewmodel.
+            char armsViewmodelPath[PLATFORM_MAX_PATH];
+            GetArmsViewmodel(client, armsViewmodelPath, sizeof(armsViewmodelPath));
+
+            int armsViewmodel = CreateWearable(true);
+            SetEntityModel(armsViewmodel, armsViewmodelPath);
+            SDKCall(SDKCall_CTFPlayer_EquipWearable, client, armsViewmodel);
+            allPlayers[client].CurrentArmsViewmodel = armsViewmodel;
+
+            // Make the actual viewmodel and actual worldmodel invisible.
+            int oldViewmodel = GetEntPropEnt(client, Prop_Send, "m_hViewModel");
+            SetEntProp(oldViewmodel, Prop_Send, "m_fEffects", EF_NODRAW);
+            SetEntityRenderMode(weapon, RENDER_TRANSALPHA);
+            SetEntityRenderColor(weapon, 0, 0, 0, 0);
+            break;
+        }
+    }
+
+    allPlayers[client].UsingCustomModels = true;
+}
+int RemoveViewmodelsFromPlayer(int client)
+{
+    RemoveWearableIfExists(client, allPlayers[client].CurrentViewmodel);
+    RemoveWearableIfExists(client, allPlayers[client].CurrentArmsViewmodel);
+    RemoveWearableIfExists(client, allPlayers[client].CurrentWorldmodel);
+
+    int activeWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+    if (activeWeapon != -1)
+    {
+        SetEntityRenderMode(activeWeapon, RENDER_NORMAL);
+        SetEntityRenderColor(activeWeapon, 255, 255, 255, 255);
+    }
+    int viewmodel = GetEntPropEnt(client, Prop_Send, "m_hViewModel");
+    if (viewmodel != -1)
+        SetEntProp(viewmodel, Prop_Send, "m_fEffects", 0);
+
+    allPlayers[client].UsingCustomModels = false;
+}
+void RemoveWearableIfExists(int client, int entity)
+{
+    if (IsValidEntity(entity))
+        TF2_RemoveWearable(client, entity);
+}
+void GetArmsViewmodel(int client, char[] buffer, int length)
+{
+    if (DoesPlayerHaveItem(client, 142)) // Gunslinger.
+        strcopy(buffer, length, armsViewmodels[0]);
+    strcopy(buffer, length, armsViewmodels[TF2_GetPlayerClass(client)]);
+}
+
+public void TF2_OnConditionAdded(int client, TFCond condition) // No condition management is done in here, this is only to get around some bugs with the world mode.
+{
+    // Check if the custom models should be removed.
+    if (condition != TFCond_Taunting)
+        return;
+    
+    int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+    int index = weapon != -1 ? GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") : -1;
+    int taunt = GetEntProp(client, Prop_Send, "m_iTauntItemDefIndex");
+    bool ShowWhileTaunting;
+    for (int i = 0; i < sizeof(customWeapons); ++i)
+    {
+        if (index == customWeapons[i].ItemDefinitionIndex)
+            ShowWhileTaunting = customWeapons[i].ShowWhileTaunting;
+    }
+    if ((taunt < 0 && ShowWhileTaunting) || !allPlayers[client].UsingCustomModels)
+        return;
+
+    RemoveViewmodelsFromPlayer(client);
+}
+public void TF2_OnConditionRemoved(int client, TFCond condition)
+{
+    if (condition != TFCond_Taunting)
+        return;
+    if (!allPlayers[client].UsingCustomModels)
+        ApplyViewmodelsToPlayer(client);
+}
+
+//////////////////////////////////////////////////////////////////////////////
 // EVENTS                                                                   //
 //////////////////////////////////////////////////////////////////////////////
 
@@ -2071,6 +2273,15 @@ public Action ClientDeath(Event event, const char[] name, bool dontBroadcast)
     return Plugin_Continue;
 }
 
+public Action ClientRocketJumped(Event event, const char[] name, bool dontBroadcast)
+{
+    // Set up variables.
+    int client = GetClientOfUserId(event.GetInt("userid"));
+    if (allPlayers[client].WeaponBlastJumpedWith == 237) // Play the swooosh sound with the Rocket Jumper.
+        event.SetInt("playsound", true);
+    return Plugin_Continue;
+}
+
 // When a player spawns in or touches a resupply locker.
 public void PostClientInventoryReset(Event event, const char[] name, bool dontBroadcast)
 {
@@ -2080,6 +2291,9 @@ public void PostClientInventoryReset(Event event, const char[] name, bool dontBr
 
     // Structurise the player's weapon list.
     StructuriseWeaponList(client);
+
+    // Viewmodels.
+    ApplyViewmodelsToPlayer(client);
 }
 
 
@@ -2101,6 +2315,11 @@ void RewardChargeOnChargeKill(int client) // This is called next frame to compen
             newCharge += chargeOnChargeKillWeapons[i][1];
     }
     SetEntPropFloat(client, Prop_Send, "m_flChargeMeter", newCharge > 100.00 ? 100.00 : newCharge);
+}
+
+void NextFrameApplyViewmodelsToPlayer(int client)
+{
+    ApplyViewmodelsToPlayer(client);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2129,6 +2348,9 @@ public void OnEntityCreated(int entity, const char[] class)
         // Hooks.
         if (StrContains(class, "tf_weapon") == 0) // Hooks restricted to weapons only.
         {
+            SetEntProp(entity, Prop_Send, "m_bValidatedAttachedEntity", true);
+
+            // DHooks.
             DHookEntity(DHooks_CTFWeaponBase_FinishReload, false, entity, _, WeaponReloaded);
             DHookEntity(DHooks_CTFWeaponBase_Reload, false, entity, _, WeaponReload);
             DHookEntity(DHooks_CTFWeaponBase_PrimaryAttack, false, entity, _, WeaponPrimaryFire);
@@ -2147,6 +2369,8 @@ public void OnEntityCreated(int entity, const char[] class)
                 DHookEntity(DHooks_CWeaponMedigun_ItemPostFrame, false, entity, _, MedigunItemPostFrame);
             else if (StrEqual(class, "tf_weapon_sniperrifle_decap"))
                 DHookEntity(DHooks_CTFSniperRifleDecap_SniperRifleChargeRateMod, false, entity, _, GetBazaarBargainChargeRate);
+
+            allEntities[entity].OriginalTF2ItemsIndex = OriginalTF2ItemsIndex;
         }
     }
     else if (StrEqual(class, "tf_projectile_ball_ornament"))
@@ -2452,18 +2676,19 @@ Action EntitySpawn(int entity)
         int client = GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity");
         if (client > 0 && client <= MaxClients) // Set ammo pack model to the player's active weapon.
         {
-            SetEntProp(entity, Prop_Send, "m_nModelIndexOverrides", GetEntProp(GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"), Prop_Send, "m_iWorldModelIndex"), _, 0);
+            //SetEntProp(entity, Prop_Send, "m_nModelIndexOverrides", GetEntProp(GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"), Prop_Send, "m_iWorldModelIndex"), _, 0);
+            SetEntProp(entity, Prop_Send, "m_nModelIndex", GetEntProp(GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"), Prop_Send, "m_iWorldModelIndex"), _, 0);
         }
     }
-    else if (HasEntProp(entity, Prop_Send, "m_iWorldModelIndex"))
+    else if (IsValidEntity(entity) && HasEntProp(entity, Prop_Send, "m_iWorldModelIndex") && HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex"))
     {
-        int index = GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex");
+        int index = GetWeaponIndex(entity);
         for (int i = 0; i < sizeof(customWeapons); ++i)
         {
             if (index == customWeapons[i].ItemDefinitionIndex)
             {
-                SetEntProp(entity, Prop_Send, "m_iWorldModelIndex", customWeapons[i].Cache);
-                SetEntProp(entity, Prop_Send, "m_nModelIndexOverrides", customWeapons[i].Cache, _, 0);
+                SetEntProp(entity, Prop_Send, "m_iWorldModelIndex", customWeapons[i].Cache); // this only exists just for the sake of ammo drops.
+                //SetEntProp(entity, Prop_Send, "m_nModelIndexOverrides", customWeapons[i].Cache, _, 0); // this fucks up viewmodel animations, great. thanks source
                 break;
             }
         }
@@ -2594,7 +2819,7 @@ Action BuildingDamaged(int victim, int& attacker, int& inflictor, float& damage,
 Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, int& damagetype, int& weapon, float damageforce[3], float damageposition[3], int damagecustom)
 {
     Action returnValue = Plugin_Continue;
-    int index = IsValidEntity(weapon) ? GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") : -1;
+    int index = GetWeaponIndex(weapon);
     int victimActiveWeapon = GetEntPropEnt(victim, Prop_Send, "m_hActiveWeapon");
     allPlayers[victim].HealthBeforeKill = GetClientHealth(victim);
 
@@ -2808,6 +3033,12 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
             allPlayers[attacker].BazaarBargainShot = BazaarBargain_Gain;
         if (index == 356 && damagecustom == TF_CUSTOM_BACKSTAB) // Save the player's HP for the Kunai backstab.
             allPlayers[attacker].OldHealth = GetClientHealth(attacker);
+        if (index == 237) // Stop the Rocket Jumper from damaging yourself.
+        {
+            allPlayers[attacker].OldHealth = GetClientHealth(attacker);
+            allPlayers[attacker].WeaponBlastJumpedWith = 237;
+            SetEntityHealth(attacker, allPlayers[attacker].MaxHealth);
+        }
     }
 
     if (damagetype & DMG_FALL) // Fall damage.
@@ -2949,37 +3180,44 @@ void AfterClientDamaged(int victim, int attacker, int inflictor, float damage, i
         // Finally, holster the Spy-cicle!
         ClientCommand(victim, "slot2"); // Equip the sapper. Probably should SDKCall Weapon_Switch instead and use the sapper entity.
     }
-    if (!IsPlayerAlive(victim) && IsValidEntity(weapon))
+    if (IsValidEntity(weapon))
     {
-        int index = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
-        if (index == 214) // Powerjack kill.
+        int index = GetWeaponIndex(weapon);
+        if (!IsPlayerAlive(victim))
         {
-            // Show that attacker got healed.
-            Handle event = CreateEvent("player_healonhit", true);
-            SetEventInt(event, "amount", intMin(PYRO_OVERHEAL - GetClientHealth(attacker), 75));
-            SetEventInt(event, "entindex", attacker);
-            FireEvent(event);
+            if (index == 214) // Powerjack kill.
+            {
+                // Show that attacker got healed.
+                Handle event = CreateEvent("player_healonhit", true);
+                SetEventInt(event, "amount", intMin(PYRO_OVERHEAL - GetClientHealth(attacker), 75));
+                SetEventInt(event, "entindex", attacker);
+                FireEvent(event);
 
-            // Set health.
-            SetEntityHealth(attacker, intMin(GetClientHealth(attacker) + 75, PYRO_OVERHEAL));
+                // Set health.
+                SetEntityHealth(attacker, intMin(GetClientHealth(attacker) + 75, PYRO_OVERHEAL));
+            }
+            if (index == 356 && damagecustom == TF_CUSTOM_BACKSTAB) // Conniver's Kunai backstab.
+            {
+                // Show that attacker got healed.
+                Handle event = CreateEvent("player_healonhit", true);
+                SetEventInt(event, "amount", intMin(KUNAI_OVERHEAL - allPlayers[attacker].OldHealth, allPlayers[victim].HealthBeforeKill));
+                SetEventInt(event, "entindex", attacker);
+                FireEvent(event);
+
+                // Set health.
+                SetEntityHealth(attacker, intMin(allPlayers[attacker].OldHealth + allPlayers[victim].HealthBeforeKill, KUNAI_OVERHEAL));
+            }
+            if (((weapon == GetPlayerWeaponSlot(attacker, TFWeaponSlot_Melee) && allPlayers[attacker].GiveChargeOnKill) || damagecustom == TF_CUSTOM_CHARGE_IMPACT) && DoesPlayerHaveItemByClass(attacker, "tf_wearable_demoshield")) // Award charge on charge kill.
+                RequestFrame(RewardChargeOnChargeKill, attacker);
+            if (index == 357) // Half-Zatoichi kill.
+                SetEntityHealth(attacker, allPlayers[attacker].MaxHealth);
+            if (index == 402 && TF2_IsPlayerInCondition(attacker, TFCond_Slowed)) // Do not gain two heads in one time. I don't wanna make yet another DHook so I'll just make this instead.
+                SetEntProp(attacker, Prop_Send, "m_iDecapitations", GetEntProp(attacker, Prop_Send, "m_iDecapitations") - 1);
         }
-        if (index == 356 && damagecustom == TF_CUSTOM_BACKSTAB) // Conniver's Kunai backstab.
+        if (index == 237) // Stop the Rocket Jumper from damaging yourself.
         {
-            // Show that attacker got healed.
-            Handle event = CreateEvent("player_healonhit", true);
-            SetEventInt(event, "amount", intMin(KUNAI_OVERHEAL - allPlayers[attacker].OldHealth, allPlayers[victim].HealthBeforeKill));
-            SetEventInt(event, "entindex", attacker);
-            FireEvent(event);
-
-            // Set health.
-            SetEntityHealth(attacker, intMin(allPlayers[attacker].OldHealth + allPlayers[victim].HealthBeforeKill, KUNAI_OVERHEAL));
+            SetEntityHealth(attacker, allPlayers[attacker].OldHealth);
         }
-        if (((weapon == GetPlayerWeaponSlot(attacker, TFWeaponSlot_Melee) && allPlayers[attacker].GiveChargeOnKill) || damagecustom == TF_CUSTOM_CHARGE_IMPACT) && DoesPlayerHaveItemByClass(attacker, "tf_wearable_demoshield")) // Award charge on charge kill.
-            RequestFrame(RewardChargeOnChargeKill, attacker);
-        if (index == 357) // Half-Zatoichi kill.
-            SetEntityHealth(attacker, allPlayers[attacker].MaxHealth);
-        if (index == 402 && TF2_IsPlayerInCondition(attacker, TFCond_Slowed)) // Do not gain two heads in one time. I don't wanna make yet another DHook so I'll just make this instead.
-            SetEntProp(attacker, Prop_Send, "m_iDecapitations", GetEntProp(attacker, Prop_Send, "m_iDecapitations") - 1);
     }
     if (DoesPlayerHaveItem(victim, 1099) && TF2_IsPlayerInCondition(victim, TFCond_Charging)) // Charge loss when taking damage with the Tide Turner.
     {
@@ -2995,6 +3233,7 @@ void AfterClientDamaged(int victim, int attacker, int inflictor, float damage, i
 
 void AfterClientSwitchedWeapons(int client, int weapon)
 {
+    // Weapon functionality.
     if (IsValidEntity(weapon))
     {
         int index = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
@@ -3005,12 +3244,9 @@ void AfterClientSwitchedWeapons(int client, int weapon)
         }
     }
     allPlayers[client].FramesSinceLastSwitch = 0;
-    /*
-    if (GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") == 61)
-    {
-        SetEntProp(GetEntPropEnt(client, Prop_Send, "m_hViewModel", 0), Prop_Send, "m_nModelIndex", AmbassadorModel);
-    }
-    */
+
+    // Viewmodels.
+    ApplyViewmodelsToPlayer(client);
 }
 
 Action ClientGetMaxHealth(int client, int& maxhealth)
