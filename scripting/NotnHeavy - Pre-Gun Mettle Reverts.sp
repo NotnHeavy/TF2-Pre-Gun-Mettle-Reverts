@@ -32,8 +32,6 @@
 #define SCOUT_PISTOL_AMMO_TYPE 2
 #define FLESH_IMPACT_BULLET_COUNT 5
 
-#define PLAYER_CENTER_HEIGHT 41
-
 #define FLIGHT_TIME_TO_MAX_STUN	1.0
 
 #define TF_STUN_NONE						0
@@ -106,7 +104,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.1.1",
+    version = "1.2",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -284,6 +282,11 @@ enum struct ModelInformation
     
     char FullModel[PLATFORM_MAX_PATH];
 }
+enum struct BlockedItem
+{
+    char Name[MAX_NAME_LENGTH];
+    int Index;
+}
 enum struct TF2ConVar
 {
     char Name[MAX_NAME_LENGTH];
@@ -321,7 +324,17 @@ int chargeOnChargeKillWeapons[][] =
 };
 ModelInformation customWeapons[] =
 {
-    { "models\\weapons\\c_models\\c_rocketjumper\\c_oldrocketjumper", "materials\\models\\weapons\\c_items\\c_rocketjumper", false, 237 } // Rocket Jumper
+    { "models\\weapons\\c_models\\c_rocketjumper\\c_oldrocketjumper", "materials\\models\\weapons\\c_items\\c_rocketjumper", false, 237 }, // Rocket Jumper.
+    { "models\\weapons\\c_models\\c_old_sticky_jumper", "materials\\models\\weapons\\c_items\\c_sticky_jumper", true, 265 } // Sticky Jumper.
+};
+BlockedItem blockedWeapons[] =
+{
+    { "Dragon's Fury", 1178 },
+    { "Thermal Thruster", 1179 },
+    { "Gas Passer", 1180 },
+    { "Hot Hand", 1181 },
+    { "Second Banana", 1190 },
+    { "Prinny Machete", 30758 }
 };
 TF2ConVar defaultConVars[] =
 { 
@@ -662,7 +675,7 @@ bool IsSetup()
 int GetChargeType(int entity)
 {
     int iTmp = MEDIGUN_CHARGE_INVULN;
-    if (GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") == 998)
+    if (GetWeaponIndex(entity) == 998)
         iTmp += GetEntProp(entity, Prop_Send, "m_nChargeResistType");
     return iTmp;
 }
@@ -756,7 +769,8 @@ public void OnPluginStart()
 
     HookEvent("player_spawn", ClientSpawn);
     HookEvent("player_death", ClientDeath, EventHookMode_Pre);
-    HookEvent("rocket_jump", ClientRocketJumped, EventHookMode_Pre);
+    HookEvent("rocket_jump", ClientBlastJumped, EventHookMode_Pre);
+    HookEvent("sticky_jump", ClientBlastJumped, EventHookMode_Pre);
     HookEvent("post_inventory_application", PostClientInventoryReset);
 
     AddNormalSoundHook(SoundPlayed);
@@ -1398,6 +1412,22 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
                 // Afterburn immunity is dealt with separately.
                 TF2Items_SetNumAttributes(newItem, 2);
             }
+            else if (index == 265) // Sticky Jumper.
+            {
+                // Apply new attributes.
+                TF2Items_SetFlags(newItem, OVERRIDE_ATTRIBUTES | OVERRIDE_ITEM_DEF);
+                TF2Items_SetItemIndex(newItem, 20);
+                TF2Items_SetAttribute(newItem, 2, 1, 0.00); // -100% damage penalty
+                TF2Items_SetAttribute(newItem, 3, 15, 0.00); // No random critical hits
+                TF2Items_SetAttribute(newItem, 4, 78, 3.00); // +200% max primary ammo on wearer
+                TF2Items_SetAttribute(newItem, 5, 89, -6.00); // -6 max pipebombs out
+                TF2Items_SetAttribute(newItem, 6, 280, 14.00); // override_projectile_type
+                TF2Items_SetAttribute(newItem, 7, 400, 1.00); // Wearer cannot carry the intelligence briefcase or PASS Time JACK
+
+                TF2Items_SetNumAttributes(newItem, 8);
+
+                OriginalTF2ItemsIndex = 265; // h
+            }
             else if (index == 406) // Splendid Screen.
             {
                 // Remove old attributes.
@@ -1928,18 +1958,16 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
     }
 
     // Disallowed weapons - anything that was not available before Gun Mettle.
-    if 
-    (
-        GetConVarInt(notnheavy_gunmettle_reverts_reject_newitems) != 0 &&
-        (
-            (index >= 1178 && index <= 1181) || // Dragon's Fury, Thermal Thruster, Gas Passer, Hot Hand
-            (index == 30758) || // Prinny Machete.
-            (index == 1190) // Second Banana.
-        )
-    )
+    if (GetConVarInt(notnheavy_gunmettle_reverts_reject_newitems))
     {
-        PrintToChat(client, "Cannot use weapon with item definition index %i", index); // TODO: get the name of the weapon.
-        return Plugin_Handled;
+        for (int i = 0; i < sizeof(blockedWeapons); ++i)
+        {
+            if (index == blockedWeapons[i].Index)
+            {
+                PrintToChat(client, "You cannot use the %s.", blockedWeapons[i].Name);
+                return Plugin_Handled;
+            }
+        }
     }
 
     item = newItem;
@@ -2046,24 +2074,30 @@ int GetWeaponIndex(int weapon)
     return allEntities[weapon].OriginalTF2ItemsIndex != -1 ? allEntities[weapon].OriginalTF2ItemsIndex : GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
 }
 
+void GetAbsOrigin(int entity, float absOrigin[3], bool center = true)
+{
+    // Create vectors.
+    float mins[3];
+    float maxs[3];
+
+    // Get the absolute origin of the victim.
+    GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", absOrigin);
+    if (center)
+    {
+        GetEntPropVector(entity, Prop_Send, "m_vecMins", mins);
+        GetEntPropVector(entity, Prop_Send, "m_vecMaxs", maxs);
+        absOrigin[0] += (mins[0] + maxs[0]) * 0.5;
+        absOrigin[1] += (mins[1] + maxs[1]) * 0.5;
+        absOrigin[2] += (mins[2] + maxs[2]) * 0.5;
+    }
+}
+
 float ApplyRadiusDamage(int victim, float damageposition[3], float radius, float damage, float rampup, float falloff, bool center = true)
 {
     // Create vectors.
     float absOrigin[3];
     float vectorDistance[3];
-    float mins[3];
-    float maxs[3];
-
-    // Get the absolute origin of the victim.
-    GetEntPropVector(victim, Prop_Data, "m_vecAbsOrigin", absOrigin);
-    if (center)
-    {
-        GetEntPropVector(victim, Prop_Send, "m_vecMins", mins);
-        GetEntPropVector(victim, Prop_Send, "m_vecMaxs", maxs);
-        absOrigin[0] += (mins[0] + maxs[0]) * 0.5;
-        absOrigin[1] += (mins[1] + maxs[1]) * 0.5;
-        absOrigin[2] += (mins[2] + maxs[2]) * 0.5;
-    }
+    GetAbsOrigin(victim, absOrigin, center);
 
     // Calculate the damage.
     SubtractVectors(damageposition, absOrigin, vectorDistance);
@@ -2207,7 +2241,7 @@ public void TF2_OnConditionAdded(int client, TFCond condition) // No condition m
         return;
     
     int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-    int index = weapon != -1 ? GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") : -1;
+    int index = GetWeaponIndex(weapon);
     int taunt = GetEntProp(client, Prop_Send, "m_iTauntItemDefIndex");
     bool ShowWhileTaunting;
     for (int i = 0; i < sizeof(customWeapons); ++i)
@@ -2251,7 +2285,7 @@ public Action ClientDeath(Event event, const char[] name, bool dontBroadcast)
     // Make the player's sentry shield disappear in only one second.
     if (IsValidEntity(weapon))
     {
-        int index = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
+        int index = GetWeaponIndex(weapon);
         if (index == 140 || index == 1086 || index == 30668) // Make the player's sentry shield disappear in only one second.
         {
             int sentry = SDKCall(SDKCall_CTFPlayer_GetObjectOfType, client, OBJ_SENTRYGUN, 0);
@@ -2273,12 +2307,13 @@ public Action ClientDeath(Event event, const char[] name, bool dontBroadcast)
     return Plugin_Continue;
 }
 
-public Action ClientRocketJumped(Event event, const char[] name, bool dontBroadcast)
+public Action ClientBlastJumped(Event event, const char[] name, bool dontBroadcast)
 {
     // Set up variables.
     int client = GetClientOfUserId(event.GetInt("userid"));
-    if (allPlayers[client].WeaponBlastJumpedWith == 237) // Play the swooosh sound with the Rocket Jumper.
+    if (allPlayers[client].WeaponBlastJumpedWith == 237 || allPlayers[client].WeaponBlastJumpedWith == 265) // Play the wind sound with the Rocket Jumper/Sticky Jumper
         event.SetInt("playsound", true);
+    allPlayers[client].WeaponBlastJumpedWith = 0;
     return Plugin_Continue;
 }
 
@@ -2518,7 +2553,7 @@ public void OnGameFrame()
             }
 
             // Half-Zatoichi honorbound. This is hacky but hooks to Weapon_Switch/Weapon_CanSwitchTo don't fully work because of client prediction.
-            if (activeWeapon != -1 && GetEntProp(activeWeapon, Prop_Send, "m_iItemDefinitionIndex") == 357 && GetEntProp(i, Prop_Send, "m_iKillCountSinceLastDeploy") == 0 && GetGameTime() >= GetEntPropFloat(i, Prop_Send, "m_flFirstPrimaryAttack"))
+            if (activeWeapon != -1 && GetWeaponIndex(activeWeapon) == 357 && GetEntProp(i, Prop_Send, "m_iKillCountSinceLastDeploy") == 0 && GetGameTime() >= GetEntPropFloat(i, Prop_Send, "m_flFirstPrimaryAttack"))
                 TF2_AddCondition(i, TFCond_RestrictToMelee, TICK_RATE_PRECISION * 2);
 
             // Short Circuit alt-fire prevention.
@@ -2639,11 +2674,11 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 
     // Allow the user to pick up buildings with the Short Circuit equipped.
     doesHaveWeapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-    if (IsValidEntity(doesHaveWeapon) && GetEntProp(doesHaveWeapon, Prop_Send, "m_iItemDefinitionIndex") == 528 && !GetEntProp(client, Prop_Send, "m_bHasPasstimeBall") && buttons & IN_ATTACK2)
+    if (IsValidEntity(doesHaveWeapon) && GetWeaponIndex(doesHaveWeapon) == 528 && !GetEntProp(client, Prop_Send, "m_bHasPasstimeBall") && buttons & IN_ATTACK2)
         SDKCall(SDKCall_CTFPlayer_TryToPickupBuilding, client);
 
     // Prevent using alt-fire to activate the Amputator taunt.
-    if (IsValidEntity(doesHaveWeapon) && GetEntProp(doesHaveWeapon, Prop_Send, "m_iItemDefinitionIndex") == 304 && buttons & IN_ATTACK2)
+    if (IsValidEntity(doesHaveWeapon) && GetWeaponIndex(doesHaveWeapon) == 304 && buttons & IN_ATTACK2)
     {
         buttons ^= IN_ATTACK2;
         return Plugin_Changed;
@@ -2652,7 +2687,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
     // Do not launch the Huntsman arrow until the player is on the ground. This kind of screws up client prediction though.
     if (IsValidEntity(doesHaveWeapon))
     {
-        int index = GetEntProp(doesHaveWeapon, Prop_Send, "m_iItemDefinitionIndex");
+        int index = GetWeaponIndex(doesHaveWeapon);
         if ((index == 56 || index == 1005 || index == 1092) && GetEntityFlags(client) & FL_ONGROUND == 0 && allPlayers[client].WasInAttack)
         {
             buttons |= IN_ATTACK;
@@ -2722,7 +2757,7 @@ Action EntityTouch(int entity, int other)
             }
 
             // Allow the Pomson projectile to go through teammates and teammate buildings.
-            if (GetEntProp(GetEntPropEnt(entity, Prop_Send, "m_hLauncher"), Prop_Send, "m_iItemDefinitionIndex") == 588 && (isTeammate || HasEntProp(other, Prop_Send, "m_hBuilder")))
+            if (GetWeaponIndex(GetEntPropEnt(entity, Prop_Send, "m_hLauncher")) == 588 && (isTeammate || HasEntProp(other, Prop_Send, "m_hBuilder")))
                 return Plugin_Handled;
         }
 
@@ -2732,7 +2767,7 @@ Action EntityTouch(int entity, int other)
             allPlayers[other].MostRecentProjectileEncounter = entity;
             
             // Pick up the Wrap Assassin ornament for usage.
-            int doesHaveWeapon = DoesPlayerHaveItem(other, 648);
+            int doesHaveWeapon = DoesPlayerHaveItems(other, { 44, 648 }, 2);
             if (StrEqual(allEntities[entity].Class, "tf_projectile_ball_ornament") && doesHaveWeapon && GetEntPropFloat(doesHaveWeapon, Prop_Send, "m_flEffectBarRegenTime") > GetGameTime())
             {
                 RemoveEntity(entity);
@@ -2755,7 +2790,7 @@ Action BuildingDamaged(int victim, int& attacker, int& inflictor, float& damage,
     Action returnValue = Plugin_Continue;
     if (IsValidEntity(weapon))
     {
-        int index = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
+        int index = GetWeaponIndex(weapon);
         if (damagecustom == TF_CUSTOM_CANNONBALL_PUSH) // Loose Cannon ball.
         {
             damage = 60.00;
@@ -2947,7 +2982,7 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
             }
             returnValue = Plugin_Changed;
         }
-        if (index == 357 && IsValidEntity(victimActiveWeapon) && GetEntProp(victimActiveWeapon, Prop_Send, "m_iItemDefinitionIndex") == 357) // Half-Zatoichi duels. Instead of checking for the active weapon index or class name or whatever, Valve decided to go with checking for the honorbound attribute instead...
+        if (index == 357 && IsValidEntity(victimActiveWeapon) && GetWeaponIndex(victimActiveWeapon) == 357) // Half-Zatoichi duels. Instead of checking for the active weapon index or class name or whatever, Valve decided to go with checking for the honorbound attribute instead...
         {
             damage = float(GetClientHealth(victim) * 3);
             damagetype |= DMG_DONT_COUNT_DAMAGE_TOWARDS_CRIT_RATE;
@@ -3001,14 +3036,12 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
                     // Set up vectors.
                     float start[3];
                     float end[3];
-                    
-                    GetClientEyePosition(attacker, start);
-                    GetEntPropVector(victim, Prop_Send, "m_vecOrigin", end);
-                    end[2] += PLAYER_CENTER_HEIGHT;
+                    GetAbsOrigin(attacker, start);
+                    GetAbsOrigin(victim, end);
 
                     // Modify damage.
                     damagetype ^= DMG_USEDISTANCEMOD; // Do not use internal rampup/falloff.
-                    damage *= 1.0 + 0.50 * (1.0 - GetVectorDistance(start, end) / 512.00); // 100 base damage, 50% rampup.
+                    damage *= 1.0 + 0.50 * (1.0 - GetVectorDistance(start, end) / 1024.00); // 100 base damage, 50% rampup.
                 }
                 returnValue = Plugin_Changed;
             }
@@ -3033,10 +3066,10 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
             allPlayers[attacker].BazaarBargainShot = BazaarBargain_Gain;
         if (index == 356 && damagecustom == TF_CUSTOM_BACKSTAB) // Save the player's HP for the Kunai backstab.
             allPlayers[attacker].OldHealth = GetClientHealth(attacker);
-        if (index == 237) // Stop the Rocket Jumper from damaging yourself.
+        if (index == 237 || index == 265) // Stop the Rocket Jumper/Sticky Jumper from damaging yourself.
         {
             allPlayers[attacker].OldHealth = GetClientHealth(attacker);
-            allPlayers[attacker].WeaponBlastJumpedWith = 237;
+            allPlayers[attacker].WeaponBlastJumpedWith = index;
             SetEntityHealth(attacker, allPlayers[attacker].MaxHealth);
         }
     }
@@ -3153,7 +3186,7 @@ Action ClientDamagedAlive(int victim, int &attacker, int &inflictor, float &dama
 
     if (IsValidEntity(weapon))
     {
-        int index = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
+        int index = GetWeaponIndex(weapon);
         if (index == 230 && GetGameTime() - allPlayers[attacker].TimeSinceScoping >= 1.0 && TF2_IsPlayerInCondition(attacker, TFCond_Slowed)) // Sydney Sleeper Jarateing.
             TF2_AddCondition(victim, TFCond_Jarated, 8.0);
     }
@@ -3165,7 +3198,7 @@ void AfterClientDamaged(int victim, int attacker, int inflictor, float damage, i
 {
     Address shared = GetEntityAddress(victim) + view_as<Address>(FindSendPropInfo("CTFPlayer", "m_Shared"));
     int victimActiveWeapon = GetEntPropEnt(victim, Prop_Send, "m_hActiveWeapon");
-    if (IsValidEntity(victimActiveWeapon) && GetEntProp(victimActiveWeapon, Prop_Send, "m_iItemDefinitionIndex") == 649 && damagetype & (DMG_IGNITE | DMG_BURN)) // Spy-cicle fire immunity.
+    if (IsValidEntity(victimActiveWeapon) && GetWeaponIndex(victimActiveWeapon) == 649 && damagetype & (DMG_IGNITE | DMG_BURN)) // Spy-cicle fire immunity.
     {
         // Add immunity.
         TF2_RemoveCondition(victim, TFCond_OnFire);
@@ -3214,7 +3247,7 @@ void AfterClientDamaged(int victim, int attacker, int inflictor, float damage, i
             if (index == 402 && TF2_IsPlayerInCondition(attacker, TFCond_Slowed)) // Do not gain two heads in one time. I don't wanna make yet another DHook so I'll just make this instead.
                 SetEntProp(attacker, Prop_Send, "m_iDecapitations", GetEntProp(attacker, Prop_Send, "m_iDecapitations") - 1);
         }
-        if (index == 237) // Stop the Rocket Jumper from damaging yourself.
+        if (index == 237 || index == 265) // Stop the Rocket Jumper/Sticky Jumper from damaging yourself.
         {
             SetEntityHealth(attacker, allPlayers[attacker].OldHealth);
         }
@@ -3236,7 +3269,7 @@ void AfterClientSwitchedWeapons(int client, int weapon)
     // Weapon functionality.
     if (IsValidEntity(weapon))
     {
-        int index = GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
+        int index = GetWeaponIndex(weapon);
         if (index == 998 && allPlayers[client].UsingVaccinatorUber) // Give back resistances to the Medic if using the Vaccinator Uber.
         {
             allPlayers[client].VaccinatorHealers[client] = true;
@@ -3268,7 +3301,7 @@ Action ClientGetMaxHealth(int client, int& maxhealth)
 
 MRESReturn GetProjectileExplosionRadius(int entity, DHookReturn returnValue)
 {
-    int index = GetEntProp(GetEntPropEnt(entity, Prop_Send, "m_hLauncher"), Prop_Send, "m_iItemDefinitionIndex");
+    int index = GetWeaponIndex(GetEntPropEnt(entity, Prop_Send, "m_hLauncher"));
     if (index == 1104 && TF2_IsPlayerInCondition(GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity"), TFCond_BlastJumping)) // Do not reduce rocket radius while rocket jumping with the Air Strike.
     {
         returnValue.Value = view_as<float>(returnValue.Value) / 0.80; // Need to use view_as<float> because otherwise floating point arithmetic will just shit itself with DHooks. Think this is fixed with a newer version, but I'm not using SM 1.11.
@@ -3285,7 +3318,7 @@ MRESReturn GetProjectileExplosionRadius(int entity, DHookReturn returnValue)
 MRESReturn WeaponReloaded(int entity)
 {
     int secondaryWeapon = GetPlayerWeaponSlot(allEntities[entity].Owner, TFWeaponSlot_Secondary);
-    if (secondaryWeapon != -1 && GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") == 220 && GetEntProp(secondaryWeapon, Prop_Send, "m_iPrimaryAmmoType") == SCOUT_PISTOL_AMMO_TYPE) // Shortstop using secondary ammo reserve.
+    if (secondaryWeapon != -1 && GetWeaponIndex(entity) == 220 && GetEntProp(secondaryWeapon, Prop_Send, "m_iPrimaryAmmoType") == SCOUT_PISTOL_AMMO_TYPE) // Shortstop using secondary ammo reserve.
     {
         int newAmmo = GetWeaponAmmoReserve(entity) - (MAX_SHORTSTOP_CLIP - GetEntProp(entity, Prop_Send, "m_iClip1"));
         SetWeaponAmmoReserve(secondaryWeapon, intMax(newAmmo, 0));
@@ -3300,7 +3333,7 @@ MRESReturn WeaponReload(int entity)
 
 MRESReturn WeaponPrimaryFire(int entity)
 {
-    int index = GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex");
+    int index = GetWeaponIndex(entity);
     int owner = allEntities[entity].Owner;
     if (index == 61 || index == 1006) // Ambassador headshot cooldown.
         RequestFrame(SetSpreadInaccuracy, owner); // SDKHook_TraceAttack/SDKHook_OnTakeDamage are both called only after this function is invoked.
@@ -3361,7 +3394,7 @@ MRESReturn WeaponPrimaryFire(int entity)
 
 MRESReturn WeaponSecondaryFire(int entity)
 {
-    int index = GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex");
+    int index = GetWeaponIndex(entity);
     int owner = allEntities[entity].Owner;
     if 
     (
@@ -3580,7 +3613,7 @@ MRESReturn CalculateMaxSpeed(int entity, DHookReturn returnValue)
         returnValue.Value = view_as<float>(returnValue.Value) / 0.90 * 0.75;
         return MRES_Override;
     }
-    else if (IsValidEntity(activeWeapon) && GetEntProp(activeWeapon, Prop_Send, "m_iItemDefinitionIndex") != 411 && StrEqual(allEntities[activeWeapon].Class, "tf_weapon_medigun") && GetEntPropEnt(activeWeapon, Prop_Send, "m_hHealingTarget") != -1) // The player is a Medic who is not using the Quick-Fix and is healing a target. In that case, do not mirror their target's speed.
+    else if (IsValidEntity(activeWeapon) && GetWeaponIndex(activeWeapon) != 411 && StrEqual(allEntities[activeWeapon].Class, "tf_weapon_medigun") && GetEntPropEnt(activeWeapon, Prop_Send, "m_hHealingTarget") != -1) // The player is a Medic who is not using the Quick-Fix and is healing a target. In that case, do not mirror their target's speed.
     {
         returnValue.Value = 320.00;
         return MRES_Override;
@@ -3625,7 +3658,7 @@ MRESReturn CanAirDash(int entity, DHookReturn returnValue)
 MRESReturn UseTaunt(int entity, DHookParam parameters)
 {
     int activeWeapon = GetEntPropEnt(entity, Prop_Send, "m_hActiveWeapon");
-    if (IsValidEntity(activeWeapon) && GetEntProp(activeWeapon, Prop_Send, "m_iItemDefinitionIndex") == 594 && parameters.Get(1) == TAUNT_BASE_WEAPON && GetEntPropFloat(entity, Prop_Send, "m_flRageMeter") == 100) // Is player using mmmph with the Phlog?
+    if (IsValidEntity(activeWeapon) && GetWeaponIndex(activeWeapon) == 594 && parameters.Get(1) == TAUNT_BASE_WEAPON && GetEntPropFloat(entity, Prop_Send, "m_flRageMeter") == 100) // Is player using mmmph with the Phlog?
     {
         allPlayers[entity].TicksSinceMmmphUsage = GetGameTickCount();
         TF2_AddCondition(entity, TFCond_DefenseBuffMmmph, 3.0); // Old mmmph defense.
@@ -3746,7 +3779,7 @@ MRESReturn IsPlayerInCond(Address thisPointer, DHookReturn returnValue, DHookPar
     int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
     TFCond condition = parameters.Get(1);
     int weapon = allPlayers[client].TicksSinceProjectileEncounter == GetGameTickCount() && IsValidEdict(allPlayers[client].MostRecentProjectileEncounter) && HasEntProp(allPlayers[client].MostRecentProjectileEncounter, Prop_Send, "m_hLauncher") ? GetEntPropEnt(allPlayers[client].MostRecentProjectileEncounter, Prop_Send, "m_hLauncher") : -1;
-    if (condition == TFCond_OnFire && allPlayers[client].TicksSinceProjectileEncounter == GetGameTickCount() && weapon > 0 && GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex") == 740) // Do not make knockback greater on burning targets with the Scorch Shot. A bit hacky but it'll work.
+    if (condition == TFCond_OnFire && allPlayers[client].TicksSinceProjectileEncounter == GetGameTickCount() && weapon > 0 && GetWeaponIndex(weapon) == 740) // Do not make knockback greater on burning targets with the Scorch Shot. A bit hacky but it'll work.
     {
         returnValue.Value = false;
         allPlayers[client].TicksSinceProjectileEncounter = 0; // Prevent any further checks.
@@ -3860,7 +3893,7 @@ MRESReturn ModifyRageMeter(Address thisPointer, DHookParam parameters)
 
 MRESReturn OnMeleeSwingHit(int entity, DHookReturn returnValue, DHookParam parameters)
 {
-    if (GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") == 447) // Disciplinary Action speed boost. (This code only cares about the victim, the player using the Disciplinary Action already has their speed boost duration set to 3.6s.)
+    if (GetWeaponIndex(entity) == 447) // Disciplinary Action speed boost. (This code only cares about the victim, the player using the Disciplinary Action already has their speed boost duration set to 3.6s.)
     {
         int victim = GetEntityFromAddress(Dereference(view_as<Address>(parameters.Get(1)) + CGameTrace_m_pEnt));
         int client = allEntities[entity].Owner;
@@ -3889,7 +3922,7 @@ MRESReturn OnMinigunSharedAttack(int entity)
 
 MRESReturn BreakRazorback(int entity)
 {
-    if (GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") == 57) // Delete the Razorback entirely. This is basically how the old Razorback functioned.
+    if (GetWeaponIndex(entity) == 57) // Delete the Razorback entirely. This is basically how the old Razorback functioned.
         RemoveEntity(entity);
     return MRES_Ignored;
 }
@@ -3962,7 +3995,7 @@ MRESReturn CTFAmmoPack_OnAmmoTouch(int entity, DHookParam parameters)
 
 MRESReturn ApplyBiteEffects(int entity)
 {
-    int index = GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex");
+    int index = GetWeaponIndex(entity);
     if (index == 311) // Buffalo Steak Sandvich.
         allPlayers[allEntities[entity].Owner].TicksSinceConsumingSandvich = GetGameTickCount();
     return MRES_Ignored;
@@ -3970,7 +4003,7 @@ MRESReturn ApplyBiteEffects(int entity)
 
 MRESReturn RemoveSandvichAmmo(int entity)
 {
-    int index = GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex");
+    int index = GetWeaponIndex(entity);
     if (index == 159 || index == 433) // Prevent ammo usage from the Dalokohs Bar; allow the player to eat forever.
         return MRES_Supercede;
     return MRES_Ignored;
