@@ -2,7 +2,7 @@
 
 Hey, have you missed playing with the ridiculously fast Degreaser? Have you missed gardening 7 out of 9 classes with ease with the Caber? What about Tide Turner crits, or Baby Face's Blaster with little to no boost loss, or the Sandman and Flying Guillotine combo, or the Beggar's Bazooka shotgun that is the Panic Attack, etc etc. If so, you have come to the right place!
 
-This is a SourceMod plugin that reverts weapon attributes to just before Gun Mettle (July 2 2015), as accurately as possible. This is my first ever SM plugin, so it may not be perfect, but I think it's still made pretty well. :)
+This is a SourceMod plugin that reverts weapon attributes to just before Gun Mettle (July 2 2015), as accurately as possible. This is my first SM plugin as well, so it may not be perfect, but I worked up to my hardest!
 
 You may always look up the attributes of weapons before Gun Mettle, but just a brief analysis: The TF2 Gun Mettle update was the first major update that marked a significant turn in weapon functionality. Some weapons got nerfs, some weapons got buffs, etc etc. Tough Break also brought a lot of changes to weapons, mostly nerfs instead however. This is the main reason why I picked before Gun Mettle as the timestamp of this project, so you could get a proper taste of old TF2, while also being able to experience nearly every weapon that TF2 still has (only the Dragon's Fury, Second Banana, Thermal Thruster and Gas Passer didn't exist before Gun Mettle).
 
@@ -15,7 +15,7 @@ I will say however, that flame mechanics are very difficult to look into and so 
 
 Airblast mechanics are mostly reverted (tf_airblast_cray 0), however the hitboxes and target auto-aim (the direction your projectiles went used to be influenced by which opponent you were looking at as well) have not been reverted either since I'm not sure what to do about those either. I'll look into it though.
 
-Currently, I'm not considering weapon models/weapon sounds at the moment either. The Rocket Jumper/Sticky Jumper are both an exception, however, since as of v1.2 I have fully reverted those weapons.
+I haven't reverted weapon models/weapon sounds at the moment either. The Rocket Jumper/Sticky Jumper are both an exception, however, since as of v1.2 I have fully reverted those weapons.
 
 ## Influences
 
