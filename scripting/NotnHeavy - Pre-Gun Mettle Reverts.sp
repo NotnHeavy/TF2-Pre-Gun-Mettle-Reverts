@@ -104,7 +104,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.2",
+    version = "1.2.1",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -135,6 +135,8 @@ float max(float x, float y)
 {
     return x > y ? x : y;
 }
+
+int temp_Flare;
 
 //////////////////////////////////////////////////////////////////////////////
 // GLOBALS                                                                  //
@@ -238,6 +240,7 @@ enum struct Player
     int CurrentArmsViewmodel;
     int CurrentWorldmodel;
     bool UsingCustomModels;
+    bool InactiveDuringTaunt;
 
     // Rocket Jumper.
     int WeaponBlastJumpedWith;
@@ -2065,12 +2068,17 @@ void StructuriseWeaponList(int client)
 
 //////////////////////////////////////////////////////////////////////////////
 // WEAPON FUNCTIONALITY                                                     //
-//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////w
 
 int GetWeaponIndex(int weapon)
 {
     if (!IsValidEntity(weapon) || !HasEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex"))
         return -1;
+    for (int i = 0; i < sizeof(customWeapons); ++i)
+    {
+        if (HasEntProp(weapon, Prop_Send, "m_iWorldModelIndex") && GetEntProp(weapon, Prop_Send, "m_iWorldModelIndex") == customWeapons[i].Cache) // In case the plugin has been reloaded.
+            return customWeapons[i].ItemDefinitionIndex;
+    }
     return allEntities[weapon].OriginalTF2ItemsIndex != -1 ? allEntities[weapon].OriginalTF2ItemsIndex : GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex");
 }
 
@@ -2161,6 +2169,7 @@ int CreateWearable(bool createViewmodel = false)
 void ApplyViewmodelsToPlayer(int client)
 {
     RemoveViewmodelsFromPlayer(client);
+    allPlayers[client].InactiveDuringTaunt = false;
 
     int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
     if (!IsValidEntity(weapon))
@@ -2252,6 +2261,7 @@ public void TF2_OnConditionAdded(int client, TFCond condition) // No condition m
     if ((taunt < 0 && ShowWhileTaunting) || !allPlayers[client].UsingCustomModels)
         return;
 
+    allPlayers[client].InactiveDuringTaunt = true;
     RemoveViewmodelsFromPlayer(client);
 }
 public void TF2_OnConditionRemoved(int client, TFCond condition)
@@ -2411,7 +2421,13 @@ public void OnEntityCreated(int entity, const char[] class)
     else if (StrEqual(class, "tf_projectile_ball_ornament"))
         DHookEntity(DHooks_CTFBall_Ornament_Explode, false, entity, _, OrnamentExplode);
     else if (StrEqual(class, "tf_projectile_rocket") || StrEqual(class, "tf_projectile_flare"))
+    {
         DHookEntity(DHooks_GetRadius, true, entity, _, GetProjectileExplosionRadius);
+        if (StrEqual(class, "tf_projectile_flare"))
+        {
+            temp_Flare = entity;
+        }
+    }
     else if (StrEqual(class, "obj_sentrygun") || StrEqual(class, "obj_dispenser") || StrEqual(class, "obj_teleporter")) // Engineer's buildings.
     {
         for (int i = 0; i <= MAXPLAYERS; ++i)
@@ -3001,7 +3017,7 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
                 }
                 else // Self-detonation jump from Detonator.
                 {
-                    damage = ApplyRadiusDamage(victim, damageposition, 96.00, 30.00, 1.00, 0.33) / 1.25;
+                    damage = ApplyRadiusDamage(victim, damageposition, 96.00, 30.00, 1.00, 0.5, false) / 1.25;
                     returnValue = Plugin_Changed;
                 }
             }
@@ -3041,7 +3057,7 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
 
                     // Modify damage.
                     damagetype ^= DMG_USEDISTANCEMOD; // Do not use internal rampup/falloff.
-                    damage *= 1.0 + 0.50 * (1.0 - GetVectorDistance(start, end) / 1024.00); // 100 base damage, 50% rampup.
+                    damage *= 1.0 + 0.50 * (1.0 - GetVectorDistance(start, end) / 2048.00); // 100 base damage, 50% rampup.
                 }
                 returnValue = Plugin_Changed;
             }
