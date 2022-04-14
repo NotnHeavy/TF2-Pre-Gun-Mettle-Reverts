@@ -102,12 +102,6 @@
 				"windows" "\x55\x8B\xEC\xF3\x0F\x10\x81\x8C\x02\x00\x00"
 				"linux"	  "@_ZN15CTFPlayerShared10ModifyRageEf"
 			}
-			"CTFPlayerShared::Burn"
-			{
-				"library" "server"
-				"windows" "\x55\x8B\xEC\x83\xEC\x08\x56\x8B\xF1\x8B\x8E\x90\x01\x00\x00\x8B\x01"
-				"linux"   "@_ZN15CTFPlayerShared4BurnEP9CTFPlayerP13CTFWeaponBasef"
-			}
 			"CTFPlayerShared::CalcChargeCrit"
 			{
 				"library" "server"
@@ -402,30 +396,24 @@
 
 			"CTFPlayerShared::m_pOuter"
 			{
-				"linux"	  "400"
 				"windows" "400"
+				"linux"	  "400"
+			}
+			"CTFPlayerShared::m_flBurnDuration"
+			{
+				"windows" "520"
+				"linux"   "520"
 			}
 			"CTFPlayerShared::m_flDisguiseCompleteTime"
 			{
-				"linux"   "560"
 				"windows" "560"
+				"linux"   "560"
 			}
 
 			"CGameTrace::m_pEnt"
 			{
 				"linux"   "76"
 				"windows" "76"
-			}
-
-			"CTakeDamageInfo::m_bitsDamageType"
-			{
-				"linux"   "60"
-				"windows" "60"
-			}
-			"CTakeDamageInfo::m_eCritType"
-			{
-				"linux"   "100"
-				"windows" "100"
 			}
 		}
 		"Functions"

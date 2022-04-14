@@ -2,12 +2,10 @@
 // MADE BY NOTNHEAVY. USES GPL-3, AS PER REQUEST OF SOURCEMOD               //
 //////////////////////////////////////////////////////////////////////////////
 
-// Recreate GitHub project when finished.
-
 // This uses TF2Items by asherkin. I have also used their offset lookup tool (https://asherkin.github.io/vtable/) so thank you, asherkin! :)
 // https://forums.alliedmods.net/showthread.php?t=115100
 
-// This plugin also uses DHooks by Dr!fter. Unless compiled with >= SM 1.11, you'll have to include the plugin below:
+// This plugin also uses DHooks with Detours by Dr!fter. Unless compiled with >= SM 1.11, you'll have to include the plugin below:
 // https://forums.alliedmods.net/showthread.php?t=180114
 
 //////////////////////////////////////////////////////////////////////////////
@@ -136,8 +134,6 @@ float max(float x, float y)
     return x > y ? x : y;
 }
 
-int temp_Flare;
-
 //////////////////////////////////////////////////////////////////////////////
 // GLOBALS                                                                  //
 //////////////////////////////////////////////////////////////////////////////
@@ -255,7 +251,6 @@ enum struct Entity
     
     char Class[MAX_NAME_LENGTH];
     float SpawnTimestamp;
-    bool Present;
     int Owner;
     
     // Miniguns.
@@ -449,7 +444,6 @@ Handle SDKCall_CBaseObject_DetonateObject;
 
 Handle SDKCall_CTFPlayer_GetObjectOfType;
 Handle SDKCall_CTFPlayer_TryToPickupBuilding;
-Handle SDKCall_CTFPlayerShared_Burn;
 Handle SDKCall_CTFWeaponBaseGun_GetWeaponSpread;
 Handle SDKCall_CTFWeaponBaseGun_GetProjectileDamage;
 Handle SDKCall_CTFWrench_GetConstructionValue;
@@ -462,6 +456,7 @@ ConVar tf_parachute_maxspeed_onfire_z;
 ConVar notnheavy_gunmettle_reverts_reject_newitems;
 
 Address CTFPlayerShared_m_pOuter;
+Address CTFPlayerShared_m_flBurnDuration;
 Address CTFPlayerShared_m_flDisguiseCompleteTime;
 Address CGameTrace_m_pEnt;
 Address CTakeDamageInfo_m_bitsDamageType;
@@ -627,7 +622,7 @@ TFCond g_aDebuffConditions[] =
 	TFCond_OnFire,
 	TFCond_Jarated,
 	TFCond_Bleeding,
-	TFCond_Milked,
+	TFCond_Milked
 };
 
 float PackRatios[] =
@@ -909,11 +904,6 @@ public void OnPluginStart()
     PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_ByValue);
     SDKCall_CTFPlayer_TryToPickupBuilding = EndPrepSDKCall();
     StartPrepSDKCall(SDKCall_Raw);
-    PrepSDKCall_SetFromConf(config, SDKConf_Signature, "CTFPlayerShared::Burn");
-    PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
-    PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);
-    PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);
-    SDKCall_CTFPlayerShared_Burn = EndPrepSDKCall();
     StartPrepSDKCall(SDKCall_Entity);
     PrepSDKCall_SetFromConf(config, SDKConf_Signature, "CTFWeaponBaseGun::GetWeaponSpread");
     PrepSDKCall_SetReturnInfo(SDKType_Float, SDKPass_Plain);
@@ -933,6 +923,7 @@ public void OnPluginStart()
 
     // Offsets.
     CTFPlayerShared_m_pOuter = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_pOuter"));
+    CTFPlayerShared_m_flBurnDuration = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_flBurnDuration"));
     CTFPlayerShared_m_flDisguiseCompleteTime = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_flDisguiseCompleteTime"));
     CGameTrace_m_pEnt = view_as<Address>(GameConfGetOffset(config, "CGameTrace::m_pEnt"));
     CTakeDamageInfo_m_bitsDamageType = view_as<Address>(GameConfGetOffset(config, "CTakeDamageInfo::m_bitsDamageType"));
@@ -2421,13 +2412,7 @@ public void OnEntityCreated(int entity, const char[] class)
     else if (StrEqual(class, "tf_projectile_ball_ornament"))
         DHookEntity(DHooks_CTFBall_Ornament_Explode, false, entity, _, OrnamentExplode);
     else if (StrEqual(class, "tf_projectile_rocket") || StrEqual(class, "tf_projectile_flare"))
-    {
         DHookEntity(DHooks_GetRadius, true, entity, _, GetProjectileExplosionRadius);
-        if (StrEqual(class, "tf_projectile_flare"))
-        {
-            temp_Flare = entity;
-        }
-    }
     else if (StrEqual(class, "obj_sentrygun") || StrEqual(class, "obj_dispenser") || StrEqual(class, "obj_teleporter")) // Engineer's buildings.
     {
         for (int i = 0; i <= MAXPLAYERS; ++i)
@@ -2675,7 +2660,6 @@ public void OnGameFrame()
     }
 }
 
-// prevent shortstop shove with this.
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3], int& weapon, int& subtype, int& cmdnum, int& tickcount, int& seed, int mouse[2])
 {
     // Panic Attack fire when reaching full clip.
@@ -2876,11 +2860,9 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
 
     if ((damagetype & DMG_IGNITE || index == 348) && ((attacker != victim && GetClientTeam(attacker) != GetClientTeam(victim)) || attacker == victim) && !IsInvulnerable(victim) && !TF2_IsPlayerInCondition(victim, TFCond_FireImmune)) // Anything that causes fire.
     {
-        // Afterburn is set after client is damaged, to prevent random shenanigans with weapons such as the flare guns.
-        // Also, for some reason this hook is still called whenever you're attacking teammates... I don't know why.
         allPlayers[victim].FramesSinceEncounterWithFire = 0;
-        returnValue = Plugin_Changed;
         allPlayers[victim].LastWeaponIgnite = index; // Different weapons have different afterburn duration/afterburn damage.
+        returnValue = Plugin_Changed;
     }
 
     if (IsValidEntity(weapon)) 
@@ -2957,11 +2939,6 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
         }
         if (index == 442) // Righteous Bison damage. I doubt this is exact but it's still pretty accurate as far as I'm aware.
         {
-            // Damage ticks.
-            //if (GetGameTime() - allPlayers[victim].TimeSinceLastBisonHit < 0.045)
-            //    return Plugin_Stop;
-            //allPlayers[victim].TimeSinceLastBisonHit = GetGameTime();
-
             // Damage numbers.
             damagetype ^= DMG_USEDISTANCEMOD; // Do not use internal rampup/falloff.
             damage = 16.00 * RemapValClamped(min(0.35, GetGameTime() - allEntities[allPlayers[victim].MostRecentProjectileEncounter].SpawnTimestamp), 0.35 / 2, 0.35, 1.25, 0.75); // Deal 16 base damage with 125% rampup, 75% falloff.
@@ -3189,9 +3166,9 @@ Action ClientDamagedAlive(int victim, int &attacker, int &inflictor, float &dama
         returnValue = Plugin_Changed;
     }
 
-    if (DoesPlayerHaveItem(victim, 773)) // The player has the Pretty Boy's Pocket Pistol equipped. This is on top so the DMG_IGNITE flag is still being used.
+    if (DoesPlayerHaveItem(victim, 773)) // The player has the Pretty Boy's Pocket Pistol equipped.
     {
-        if (damagetype & DMG_FALL) // Fall damage negation
+        if (damagetype & DMG_FALL && !attacker) // Fall damage negation.
             return Plugin_Handled;
         if (damagetype & (DMG_BURN | DMG_IGNITE)) // 50% fire damage vulnerability.
         {
@@ -3273,8 +3250,8 @@ void AfterClientDamaged(int victim, int attacker, int inflictor, float damage, i
         float newCharge = GetEntPropFloat(victim, Prop_Send, "m_flChargeMeter") - damage * 3;
         SetEntPropFloat(victim, Prop_Send, "m_flChargeMeter", newCharge < 0.00 ? 0.00 : newCharge);
     }
-    if (allPlayers[victim].FramesSinceEncounterWithFire == 0 && shared != Address_Null && !TF2_IsPlayerInCondition(victim, TFCond_FireImmune) && allPlayers[victim].LastWeaponIgnite != 441) // Set 10s afterburn (don't do anything with the Cow Mangler so that it still does 12 ticks only.)
-        SDKCall(SDKCall_CTFPlayerShared_Burn, shared, attacker, weapon, 10.00); // Using this instead of TF2_IgnitePlayer so I can actually pass through the weapon used as the pWeapon parameter.
+    if (allPlayers[victim].FramesSinceEncounterWithFire == 0 && shared != Address_Null && !TF2_IsPlayerInCondition(victim, TFCond_FireImmune)) // Set 10s afterburn (or 6s with the Cow Mangler).
+        WriteToValue(shared + CTFPlayerShared_m_flBurnDuration, allPlayers[victim].LastWeaponIgnite == 441 ? 6.0 : 10.0);
     if (allPlayers[victim].TicksSinceFeignReady == GetGameTickCount()) // Set the cloak meter to 100 when feigning.
         SetEntPropFloat(victim, Prop_Send, "m_flCloakMeter", 100.00);
 
@@ -4104,6 +4081,7 @@ MRESReturn ApplyDamageRules(Address thisPointer, DHookReturn returnValue, DHookP
         allPlayers[victim].TicksSinceApplyingDamageRules = GetGameTickCount();
         allPlayers[victim].DamageInfo = view_as<Address>(parameters.Get(1));
     }
+
     return MRES_Ignored;
 }
 
