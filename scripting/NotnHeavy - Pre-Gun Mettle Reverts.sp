@@ -102,7 +102,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.2.2",
+    version = "1.2.3",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -344,7 +344,8 @@ TF2ConVar defaultConVars[] =
     { "tf_feign_death_activate_damage_scale", INVALID_HANDLE, 0, 0.10, TF2ConVarType_Float }, // Apply 90% damage resistance when activating feign death. This is to get around damage numbers appearing 10 times smaller.
     { "tf_feign_death_damage_scale", INVALID_HANDLE, 0, 1.00, TF2ConVarType_Float }, // Don't apply any damage resistance while feigning. It'll ramp down anyway.
     { "tf_feign_death_duration", INVALID_HANDLE, 0, 0.00, TF2ConVarType_Float }, // Don't provide any damage buffs, I'll just handle everything myself.
-    { "tf_stealth_damage_reduction", INVALID_HANDLE, 0, 1.0, TF2ConVarType_Float } // Cloaking does not provide any damage resistance.
+    { "tf_stealth_damage_reduction", INVALID_HANDLE, 0, 1.0, TF2ConVarType_Float }, // Cloaking does not provide any damage resistance.
+    { "tf_demoman_charge_frametime_scaling", INVALID_HANDLE, 0, 0, TF2ConVarType_Int } // Do not scale the charge turn cap multiplier. Give players a feel of turning with the old charge mechanics.
 };
 int resistanceMapping[] =
 {
@@ -2899,6 +2900,7 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
             returnValue = Plugin_Changed;
         }
         if ((index == 812 || index == 833) && allPlayers[victim].TicksSinceProjectileEncounter == GetGameTickCount() && GetGameTime() - allEntities[allPlayers[victim].MostRecentProjectileEncounter].SpawnTimestamp >= 1) // Flying Guillotine mini-crit.
+            // mini-crit
             TF2_AddCondition(victim, TFCond_MarkedForDeathSilent, TICK_RATE_PRECISION);
         if (damagecustom == TF_CUSTOM_BASEBALL && index == 44) // Sandman stun. The majority of this is sourced from the TF2 source code leak.
         {
@@ -3006,7 +3008,7 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
                 return Plugin_Handled;
 
             // Set the charge impact damage. Previously it did not have rampup.
-            damage = 50 * (1.0 + intMin(GetEntProp(attacker, Prop_Send, "m_iDecapitations"), 5) * 0.1);
+            damage = 50 * (1.0 + intMin(GetEntProp(attacker, Prop_Send, "m_iDecapitations"), 5) * 0.2);
             if (index == 406) // Increase charge damage by 70%. Much like afterburn, I should probably find a way to hook onto attributes without hardcoding numbers.
                 damage *= 1.7;
             
