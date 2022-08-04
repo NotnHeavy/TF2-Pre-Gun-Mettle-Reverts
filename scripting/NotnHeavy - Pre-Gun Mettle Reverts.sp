@@ -5,8 +5,9 @@
 // This uses TF2Items by asherkin. I have also used their offset lookup tool (https://asherkin.github.io/vtable/) so thank you, asherkin! :)
 // https://forums.alliedmods.net/showthread.php?t=115100
 
-// This plugin also uses DHooks with Detours by Dr!fter. Unless compiled with >= SM 1.11, you'll have to include the plugin below:
-// https://forums.alliedmods.net/showthread.php?t=180114
+// This plugin also uses DHooks with Detours by Dr!fter. This should be included with SourceMod 1.11.
+
+// This plugin also uses SM-Memory by Scags.
 
 //////////////////////////////////////////////////////////////////////////////
 // PRE-PROCESSING                                                           //
@@ -19,6 +20,7 @@
 #include <sdkhooks>
 #include <tf2_stocks>
 #include <dhooks>
+#include <smmem>
 
 #define PYRO_OVERHEAL 260
 #define KUNAI_OVERHEAL 180
@@ -93,296 +95,6 @@
 
 #define PLUGIN_NAME "NotnHeavy - Pre-Gun Mettle Reverts"
 
-//////////////////////////////////////////////////////////////////////////////
-// PLUGIN INFO                                                              //
-//////////////////////////////////////////////////////////////////////////////
-
-public Plugin myinfo =
-{
-    name = PLUGIN_NAME,
-    author = "NotnHeavy",
-    description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.2.3",
-    url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
-};
-
-//////////////////////////////////////////////////////////////////////////////
-// UTILITY                                                                  //
-//////////////////////////////////////////////////////////////////////////////
-
-// Get the smaller integral value.
-int intMin(int x, int y)
-{
-    return x > y ? y : x;
-}
-
-// Get the larger integral value.
-int intMax(int x, int y)
-{
-    return x > y ? x : y;
-}
-
-// Get the smaller floating point value.
-float min(float x, float y)
-{
-    return x > y ? y : x;
-}
-
-// Get the larger floating point value.
-float max(float x, float y)
-{
-    return x > y ? x : y;
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// GLOBALS                                                                  //
-//////////////////////////////////////////////////////////////////////////////
-
-enum struct Player
-{
-    int FramesSinceLastSwitch;
-    int FramesSinceEncounterWithFire;
-    int TicksSinceHeadshot;
-    int TickSinceBonk;
-    int MaxHealth;
-    int SpreadRecovery; // For Ambassador headshots.
-    int HealthBeforeKill; // For Conniver's Kunai backstabs.
-    int TicksSinceProjectileEncounter;
-    int MostRecentProjectileEncounter;
-    int OldHealth;
-    
-    int Weapons[MAX_WEAPON_COUNT];
-
-    // Shortstop.
-    int PrimaryAmmo;
-    int SecondaryAmmo;
-
-    // Pretty Boy's Pocket Pistol.
-    int TicksSinceFallDamage;
-
-    // BONK! Atomic Punch.
-    int TicksSinceBonkEnd;
-
-    // Crit-a-Cola.
-    int TicksSincePrimaryAttack;
-
-    // Flying Guillotine.
-    float CleaverChargeMeter;
-
-    // B.A.S.E. Jumper.
-    float TimeSinceDeployment;
-
-    // Afterburn.
-    int LastWeaponIgnite;
-    int TicksSinceAfterburnManualCondition;
-
-    // Phlog.
-    int TicksSinceMmmphUsage;
-
-    // Disciplinary Action.
-    int TicksSinceSpeedBoost;
-
-    // Shields.
-    float TimeSinceShieldBash;
-    bool ChargeBashHitPlayer;
-    bool GiveChargeOnKill;
-    int TicksSinceCharge;
-
-    // Panic Attack.
-    int TicksSinceFiring;
-
-    // Buffalo Steak Sandvich.
-    int TicksSinceConsumingSandvich;
-
-    // Rescue Ranger.
-    int OldMetalCount;
-
-    // Medic.
-    int RegenThink;
-    float CurrentUber;
-
-    // Vaccinator.
-    bool VaccinatorHealers[MAXPLAYERS + 1];
-    bool UsingVaccinatorUber;
-    float VaccinatorCharge;
-    float EndVaccinatorChargeFalloff;
-    int TicksSinceApplyingDamageRules;
-    Address DamageInfo;
-    int ActualDamageType;
-    ECritType ActualCritType;
-
-    // Vita-Saw.
-    bool HadVitaSawEquipped;
-
-    // Huntsman.
-    int WasInAttack;
-
-    // Sydney Sleeper.
-    float TimeSinceScoping;
-
-    // Bazaar Bargain.
-    BazaarBargainShotManager BazaarBargainShot;
-
-    // Cloaking.
-    bool UpdatingCloakMeter;
-
-    // Dead Ringer.
-    bool FeigningDeath;
-    int TicksSinceFeignReady;
-    float DamageTakenDuringFeign;
-
-    // Weapon models.
-    int CurrentViewmodel;
-    int CurrentArmsViewmodel;
-    int CurrentWorldmodel;
-    bool UsingCustomModels;
-    bool InactiveDuringTaunt;
-
-    // Rocket Jumper.
-    int WeaponBlastJumpedWith;
-}
-enum struct Entity
-{
-    int OriginalTF2ItemsIndex;
-
-    // Construction boosts. Would make this a separate enum struct but enum structs are one-dimensional.
-    float ConstructionBoostExpiryTimes[MAXPLAYERS + 1];
-    float ConstructionBoosts[MAXPLAYERS + 1];
-    
-    char Class[MAX_NAME_LENGTH];
-    float SpawnTimestamp;
-    int Owner;
-    
-    // Miniguns.
-    float TimeSinceMinigunFiring;
-
-    // Wrangler.
-    int OldShield;
-    float ShieldFadeTime;
-
-    // Gunslinger.
-    float BuildingHealth;
-
-    // Vaccinator.
-    int CurrentHealer;
-
-    // Sapper.
-    int AttachedSapper;
-}
-enum struct ModelInformation
-{
-    char Model[PLATFORM_MAX_PATH];
-    char Texture[PLATFORM_MAX_PATH];
-    
-    bool ShowWhileTaunting;
-    int ItemDefinitionIndex;
-    int Cache;
-    
-    char FullModel[PLATFORM_MAX_PATH];
-}
-enum struct BlockedItem
-{
-    char Name[MAX_NAME_LENGTH];
-    int Index;
-}
-enum struct TF2ConVar
-{
-    char Name[MAX_NAME_LENGTH];
-    Handle Variable;
-    any DefaultValue;
-    any NewValue;
-    TF2ConVarType Type;
-}
-enum TF2ConVarType
-{
-    TF2ConVarType_Int,
-    TF2ConVarType_Float
-}
-enum BazaarBargainShotManager
-{
-    BazaarBargain_Lose = -1,
-    BazaarBargain_Idle = 0,
-    BazaarBargain_Gain
-}
-Player allPlayers[MAXPLAYERS + 1];
-Entity allEntities[MAX_ENTITY_COUNT];
-int weaponHealthModifiers[][] = // A bit finnicky, but this is the closest I can get to a dictionary - with two-dimensional arrays.
-{
-    { 327, -15 }, // Claidheamh Mòr.
-    { 773, 15 }, // Pretty Boy's Pocket Pistol.
-    { 310, -20 }, // Warrior's Spirit.
-    { 231, 25 }, // Darwin's Danger Shield,
-};
-int chargeOnChargeKillWeapons[][] =
-{
-    { 608, 25 }, // Bootlegger.
-    { 405, 25 }, // Ali Baba's Wee Booties.
-    { 1099, 75 }, // Tide Turner.
-    { 327, 25 } // Claidheamh Mòr.
-};
-ModelInformation customWeapons[] =
-{
-    { "models\\weapons\\c_models\\c_rocketjumper\\c_oldrocketjumper", "materials\\models\\weapons\\c_items\\c_rocketjumper", false, 237 }, // Rocket Jumper.
-    { "models\\weapons\\c_models\\c_old_sticky_jumper", "materials\\models\\weapons\\c_items\\c_sticky_jumper", true, 265 } // Sticky Jumper.
-};
-BlockedItem blockedWeapons[] =
-{
-    { "Dragon's Fury", 1178 },
-    { "Thermal Thruster", 1179 },
-    { "Gas Passer", 1180 },
-    { "Hot Hand", 1181 },
-    { "Second Banana", 1190 },
-    { "Prinny Machete", 30758 }
-};
-TF2ConVar defaultConVars[] =
-{ 
-    { "tf_airblast_cray", INVALID_HANDLE, 0, 0, TF2ConVarType_Int },  // Revert to previous airblast. Still need to change the hitboxes, not sure how though.
-    { "tf_dropped_weapon_lifetime", INVALID_HANDLE, 0, 0, TF2ConVarType_Int }, // Do not drop weapons.
-    { "tf_parachute_aircontrol", INVALID_HANDLE, 0, 5.00, TF2ConVarType_Float }, // Give back full air control to the B.A.S.E. Jumper.
-    { "tf_damageforcescale_pyro_jump", INVALID_HANDLE, 0, 6.50, TF2ConVarType_Float }, // Tune the Detonator/Scorch Shot jumps slightly.
-    { "tf_construction_build_rate_multiplier", INVALID_HANDLE, 0, 2.00, TF2ConVarType_Float }, // Change the default build rate multiplier to 2.
-    { "tf_feign_death_activate_damage_scale", INVALID_HANDLE, 0, 0.10, TF2ConVarType_Float }, // Apply 90% damage resistance when activating feign death. This is to get around damage numbers appearing 10 times smaller.
-    { "tf_feign_death_damage_scale", INVALID_HANDLE, 0, 1.00, TF2ConVarType_Float }, // Don't apply any damage resistance while feigning. It'll ramp down anyway.
-    { "tf_feign_death_duration", INVALID_HANDLE, 0, 0.00, TF2ConVarType_Float }, // Don't provide any damage buffs, I'll just handle everything myself.
-    { "tf_stealth_damage_reduction", INVALID_HANDLE, 0, 1.0, TF2ConVarType_Float }, // Cloaking does not provide any damage resistance.
-    { "tf_demoman_charge_frametime_scaling", INVALID_HANDLE, 0, 0, TF2ConVarType_Int } // Do not scale the charge turn cap multiplier. Give players a feel of turning with the old charge mechanics.
-};
-int resistanceMapping[] =
-{
-    DMG_BULLET | DMG_BUCKSHOT,
-    DMG_BLAST,
-    DMG_IGNITE | DMG_BURN
-};
-char modelExtensions[][] =
-{
-    ".dx80.vtx",
-    ".dx90.vtx",
-    ".phy",
-    ".sw.vtx",
-    ".vvd"
-};
-char textureExtensions[][] =
-{
-    ".vmt",
-    ".vtf"
-};
-char armsViewmodels[][] = 
-{
-    // Gunslinger arms viewmodels.
-    "models\\weapons\\c_models\\c_engineer_gunslinger.mdl",
-
-    // Main arms viewmodels.
-    "models\\weapons\\c_models\\c_scout_arms.mdl",
-    "models\\weapons\\c_models\\c_sniper_arms.mdl",
-    "models\\weapons\\c_models\\c_soldier_arms.mdl",
-    "models\\weapons\\c_models\\c_demo_arms.mdl",
-    "models\\weapons\\c_models\\c_medic_arms.mdl",
-    "models\\weapons\\c_models\\c_heavy_arms.mdl",
-    "models\\weapons\\c_models\\c_pyro_arms.mdl",
-    "models\\weapons\\c_models\\c_spy_arms.mdl",
-    "models\\weapons\\c_models\\c_engineer_arms.mdl"
-};
-
 DHookSetup DHooks_GetRadius;
 DHookSetup DHooks_CTFWeaponBase_FinishReload;
 DHookSetup DHooks_CTFWeaponBase_Reload;
@@ -456,6 +168,10 @@ ConVar tf_parachute_maxspeed_onfire_z;
 
 ConVar notnheavy_gunmettle_reverts_reject_newitems;
 
+Address MemoryPatch_ShieldTurnCap;
+Address MemoryPatch_ShieldTurnCap_OldValue;
+float MemoryPatch_ShieldTurnCap_NewValue = 1000.00;
+
 Address CTFPlayerShared_m_pOuter;
 Address CTFPlayerShared_m_flBurnDuration;
 Address CTFPlayerShared_m_flDisguiseCompleteTime;
@@ -475,6 +191,47 @@ int ShortCircuit_CurrentCollectedEntities = 0;
 bool BypassRoundTimerChecks = false;
 
 int OriginalTF2ItemsIndex = -1;
+
+//////////////////////////////////////////////////////////////////////////////
+// PLUGIN INFO                                                              //
+//////////////////////////////////////////////////////////////////////////////
+
+public Plugin myinfo =
+{
+    name = PLUGIN_NAME,
+    author = "NotnHeavy",
+    description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
+    version = "1.2.3",
+    url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// UTILITY                                                                  //
+//////////////////////////////////////////////////////////////////////////////
+
+// Get the smaller integral value.
+int intMin(int x, int y)
+{
+    return x > y ? y : x;
+}
+
+// Get the larger integral value.
+int intMax(int x, int y)
+{
+    return x > y ? x : y;
+}
+
+// Get the smaller floating point value.
+float min(float x, float y)
+{
+    return x > y ? y : x;
+}
+
+// Get the larger floating point value.
+float max(float x, float y)
+{
+    return x > y ? x : y;
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // TF2 code                                                                 //
@@ -740,6 +497,255 @@ float clamp(float val, float minVal, float maxVal)
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// GLOBALS                                                                  //
+//////////////////////////////////////////////////////////////////////////////
+
+enum TF2ConVarType
+{
+    TF2ConVarType_Int,
+    TF2ConVarType_Float
+}
+enum BazaarBargainShotManager
+{
+    BazaarBargain_Lose = -1,
+    BazaarBargain_Idle = 0,
+    BazaarBargain_Gain
+}
+
+enum struct Player
+{
+    int FramesSinceLastSwitch;
+    int FramesSinceEncounterWithFire;
+    int TicksSinceHeadshot;
+    int TickSinceBonk;
+    int MaxHealth;
+    int SpreadRecovery; // For Ambassador headshots.
+    int HealthBeforeKill; // For Conniver's Kunai backstabs.
+    int TicksSinceProjectileEncounter;
+    int MostRecentProjectileEncounter;
+    int OldHealth;
+    
+    int Weapons[MAX_WEAPON_COUNT];
+
+    // Shortstop.
+    int PrimaryAmmo;
+    int SecondaryAmmo;
+
+    // Pretty Boy's Pocket Pistol.
+    int TicksSinceFallDamage;
+
+    // BONK! Atomic Punch.
+    int TicksSinceBonkEnd;
+
+    // Crit-a-Cola.
+    int TicksSincePrimaryAttack;
+
+    // Flying Guillotine.
+    float CleaverChargeMeter;
+
+    // B.A.S.E. Jumper.
+    float TimeSinceDeployment;
+
+    // Afterburn.
+    int LastWeaponIgnite;
+    int TicksSinceAfterburnManualCondition;
+
+    // Phlog.
+    int TicksSinceMmmphUsage;
+
+    // Disciplinary Action.
+    int TicksSinceSpeedBoost;
+
+    // Shields.
+    float TimeSinceShieldBash;
+    bool ChargeBashHitPlayer;
+    bool GiveChargeOnKill;
+    int TicksSinceCharge;
+
+    // Panic Attack.
+    int TicksSinceFiring;
+
+    // Buffalo Steak Sandvich.
+    int TicksSinceConsumingSandvich;
+
+    // Rescue Ranger.
+    int OldMetalCount;
+
+    // Medic.
+    int RegenThink;
+    float CurrentUber;
+
+    // Vaccinator.
+    bool VaccinatorHealers[MAXPLAYERS + 1];
+    bool UsingVaccinatorUber;
+    float VaccinatorCharge;
+    float EndVaccinatorChargeFalloff;
+    int TicksSinceApplyingDamageRules;
+    Address DamageInfo;
+    int ActualDamageType;
+    ECritType ActualCritType;
+
+    // Vita-Saw.
+    bool HadVitaSawEquipped;
+
+    // Huntsman.
+    int WasInAttack;
+
+    // Sydney Sleeper.
+    float TimeSinceScoping;
+
+    // Bazaar Bargain.
+    BazaarBargainShotManager BazaarBargainShot;
+
+    // Cloaking.
+    bool UpdatingCloakMeter;
+
+    // Dead Ringer.
+    bool FeigningDeath;
+    int TicksSinceFeignReady;
+    float DamageTakenDuringFeign;
+
+    // Weapon models.
+    int CurrentViewmodel;
+    int CurrentArmsViewmodel;
+    int CurrentWorldmodel;
+    bool UsingCustomModels;
+    bool InactiveDuringTaunt;
+
+    // Rocket Jumper.
+    int WeaponBlastJumpedWith;
+}
+enum struct Entity
+{
+    int OriginalTF2ItemsIndex;
+
+    // Construction boosts. Would make this a separate enum struct but enum structs are one-dimensional.
+    float ConstructionBoostExpiryTimes[MAXPLAYERS + 1];
+    float ConstructionBoosts[MAXPLAYERS + 1];
+    
+    char Class[MAX_NAME_LENGTH];
+    float SpawnTimestamp;
+    int Owner;
+    
+    // Miniguns.
+    float TimeSinceMinigunFiring;
+
+    // Wrangler.
+    int OldShield;
+    float ShieldFadeTime;
+
+    // Gunslinger.
+    float BuildingHealth;
+
+    // Vaccinator.
+    int CurrentHealer;
+
+    // Sapper.
+    int AttachedSapper;
+}
+enum struct ModelInformation
+{
+    char Model[PLATFORM_MAX_PATH];
+    char Texture[PLATFORM_MAX_PATH];
+    
+    bool ShowWhileTaunting;
+    int ItemDefinitionIndex;
+    int Cache;
+    
+    char FullModel[PLATFORM_MAX_PATH];
+}
+enum struct BlockedItem
+{
+    char Name[MAX_NAME_LENGTH];
+    int Index;
+}
+enum struct TF2ConVar
+{
+    char Name[MAX_NAME_LENGTH];
+    Handle Variable;
+    any DefaultValue;
+    any NewValue;
+    TF2ConVarType Type;
+}
+Player allPlayers[MAXPLAYERS + 1];
+Entity allEntities[MAX_ENTITY_COUNT];
+int weaponHealthModifiers[][] = // A bit finnicky, but this is the closest I can get to a dictionary - with two-dimensional arrays.
+{
+    { 327, -15 }, // Claidheamh Mòr.
+    { 773, 15 }, // Pretty Boy's Pocket Pistol.
+    { 310, -20 }, // Warrior's Spirit.
+    { 231, 25 }, // Darwin's Danger Shield,
+};
+int chargeOnChargeKillWeapons[][] =
+{
+    { 608, 25 }, // Bootlegger.
+    { 405, 25 }, // Ali Baba's Wee Booties.
+    { 1099, 75 }, // Tide Turner.
+    { 327, 25 } // Claidheamh Mòr.
+};
+ModelInformation customWeapons[] =
+{
+    { "models\\weapons\\c_models\\c_rocketjumper\\c_oldrocketjumper", "materials\\models\\weapons\\c_items\\c_rocketjumper", false, 237 }, // Rocket Jumper.
+    { "models\\weapons\\c_models\\c_old_sticky_jumper", "materials\\models\\weapons\\c_items\\c_sticky_jumper", true, 265 } // Sticky Jumper.
+};
+BlockedItem blockedWeapons[] =
+{
+    { "Dragon's Fury", 1178 },
+    { "Thermal Thruster", 1179 },
+    { "Gas Passer", 1180 },
+    { "Hot Hand", 1181 },
+    { "Second Banana", 1190 },
+    { "Prinny Machete", 30758 }
+};
+TF2ConVar defaultConVars[] =
+{ 
+    { "tf_airblast_cray", INVALID_HANDLE, 0, 0, TF2ConVarType_Int },  // Revert to previous airblast. Still need to change the hitboxes, not sure how though.
+    { "tf_dropped_weapon_lifetime", INVALID_HANDLE, 0, 0, TF2ConVarType_Int }, // Do not drop weapons.
+    { "tf_parachute_aircontrol", INVALID_HANDLE, 0, 5.00, TF2ConVarType_Float }, // Give back full air control to the B.A.S.E. Jumper.
+    { "tf_damageforcescale_pyro_jump", INVALID_HANDLE, 0, 6.50, TF2ConVarType_Float }, // Tune the Detonator/Scorch Shot jumps slightly.
+    { "tf_construction_build_rate_multiplier", INVALID_HANDLE, 0, 2.00, TF2ConVarType_Float }, // Change the default build rate multiplier to 2.
+    { "tf_feign_death_activate_damage_scale", INVALID_HANDLE, 0, 0.10, TF2ConVarType_Float }, // Apply 90% damage resistance when activating feign death. This is to get around damage numbers appearing 10 times smaller.
+    { "tf_feign_death_damage_scale", INVALID_HANDLE, 0, 1.00, TF2ConVarType_Float }, // Don't apply any damage resistance while feigning. It'll ramp down anyway.
+    { "tf_feign_death_duration", INVALID_HANDLE, 0, 0.00, TF2ConVarType_Float }, // Don't provide any damage buffs, I'll just handle everything myself.
+    { "tf_stealth_damage_reduction", INVALID_HANDLE, 0, 1.0, TF2ConVarType_Float }, // Cloaking does not provide any damage resistance.
+};
+int resistanceMapping[] =
+{
+    DMG_BULLET | DMG_BUCKSHOT,
+    DMG_BLAST,
+    DMG_IGNITE | DMG_BURN
+};
+char modelExtensions[][] =
+{
+    ".dx80.vtx",
+    ".dx90.vtx",
+    ".phy",
+    ".sw.vtx",
+    ".vvd"
+};
+char textureExtensions[][] =
+{
+    ".vmt",
+    ".vtf"
+};
+char armsViewmodels[][] = 
+{
+    // Gunslinger arms viewmodels.
+    "models\\weapons\\c_models\\c_engineer_gunslinger.mdl",
+
+    // Main arms viewmodels.
+    "models\\weapons\\c_models\\c_scout_arms.mdl",
+    "models\\weapons\\c_models\\c_sniper_arms.mdl",
+    "models\\weapons\\c_models\\c_soldier_arms.mdl",
+    "models\\weapons\\c_models\\c_demo_arms.mdl",
+    "models\\weapons\\c_models\\c_medic_arms.mdl",
+    "models\\weapons\\c_models\\c_heavy_arms.mdl",
+    "models\\weapons\\c_models\\c_pyro_arms.mdl",
+    "models\\weapons\\c_models\\c_spy_arms.mdl",
+    "models\\weapons\\c_models\\c_engineer_arms.mdl"
+};
+
+//////////////////////////////////////////////////////////////////////////////
 // SPECIFIC UTILITY                                                         //
 //////////////////////////////////////////////////////////////////////////////
 
@@ -922,6 +928,11 @@ public void OnPluginStart()
     PrepSDKCall_SetReturnInfo(SDKType_Float, SDKPass_Plain);
     SDKCall_CBaseObject_GetReversesBuildingConstructionSpeed = EndPrepSDKCall();
 
+    // Memory patches.
+    MemoryPatch_ShieldTurnCap = GameConfGetAddress(config, "MemoryPatch_ShieldTurnCap") + view_as<Address>(GameConfGetOffset(config, "MemoryPatch_ShieldTurnCap"));
+    MemoryPatch_ShieldTurnCap_OldValue = LoadFromAddress(MemoryPatch_ShieldTurnCap, NumberType_Int32);
+    StoreToAddress(MemoryPatch_ShieldTurnCap, AddressOf(MemoryPatch_ShieldTurnCap_NewValue), NumberType_Int32);
+
     // Offsets.
     CTFPlayerShared_m_pOuter = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_pOuter"));
     CTFPlayerShared_m_flBurnDuration = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_flBurnDuration"));
@@ -1023,6 +1034,9 @@ public void OnPluginEnd()
         if (IsClientInGame(i) && IsPlayerAlive(i))
             RemoveViewmodelsFromPlayer(i);
     }
+
+    // Memory patches.
+    StoreToAddress(MemoryPatch_ShieldTurnCap, MemoryPatch_ShieldTurnCap_OldValue, NumberType_Int32);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2205,7 +2219,7 @@ void ApplyViewmodelsToPlayer(int client)
 
     allPlayers[client].UsingCustomModels = true;
 }
-int RemoveViewmodelsFromPlayer(int client)
+void RemoveViewmodelsFromPlayer(int client)
 {
     RemoveWearableIfExists(client, allPlayers[client].CurrentViewmodel);
     RemoveWearableIfExists(client, allPlayers[client].CurrentArmsViewmodel);
@@ -2820,7 +2834,7 @@ Action BuildingDamaged(int victim, int& attacker, int& inflictor, float& damage,
                 damage = 100.00;
             returnValue =  Plugin_Changed;
         }
-        if (StrEqual(allEntities[victim].Class, "obj_sentrygun")) // Set sentry damage resistances from miniguns and the sapper's owner.
+        if (StrEqual(allEntities[victim].Class, "m_nShieldLevel")) // Set sentry damage resistances from miniguns and the sapper's owner.
         {
             bool changed = false;
             if (StrEqual(allEntities[weapon].Class, "tf_weapon_minigun"))

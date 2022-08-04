@@ -2,8 +2,29 @@
 {
 	"tf"
 	{
+		"Addresses"
+		{
+			"MemoryPatch_ShieldTurnCap"
+			{
+				"windows"
+				{
+					"signature" "CTFPlayerMove::SetupMove"
+				}
+				"linux"
+				{
+					"signature" "CTFPlayerMove::SetupMove"
+				}
+			}
+		}
 		"Signatures"
 		{
+			"CTFPlayerMove::SetupMove"
+			{
+				"library" "server"
+				"windows" "\x55\x8B\xEC\x83\xEC\x10\x56\x8B\x75\x08\x89\x4D\xFC"
+				"linux"	  "@_ZN13CTFPlayerMove9SetupMoveEP11CBasePlayerP8CUserCmdP11IMoveHelperP9CMoveData"
+			}
+
 			"InternalCalculateObjectCost"
 			{
 				"library" "server"
@@ -256,6 +277,12 @@
 		}
 		"Offsets"
 		{
+			"MemoryPatch_ShieldTurnCap"
+			{
+				"windows" "139"
+				"linux"   "140"
+			}
+
 			"GetRadius"
 			{
 				"windows" "240"
@@ -312,8 +339,8 @@
 
 			"CTFPlayer::EquipWearable"
 			{
-				"windows" "434"
-				"linux"   "435"
+				"windows" "435"
+				"linux"   "436"
 			}
 
 			"CAmmoPack::MyTouch"

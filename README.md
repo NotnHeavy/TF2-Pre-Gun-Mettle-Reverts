@@ -7,7 +7,7 @@ This is a SourceMod plugin that reverts weapon attributes to just before Gun Met
 You may always look up the attributes of weapons before Gun Mettle, but just a brief analysis: The TF2 Gun Mettle update was the first major update that marked a significant turn in weapon functionality. Some weapons got nerfs, some weapons got buffs, etc etc. Tough Break also brought a lot of changes to weapons, mostly nerfs instead however. This is the main reason why I picked before Gun Mettle as the timestamp of this project, so you could get a proper taste of old TF2, while also being able to experience nearly every weapon that TF2 still has (only the Dragon's Fury, Second Banana, Thermal Thruster and Gas Passer didn't exist before Gun Mettle).
 
 ## Installation.
-Head over to the releases tab and download the most recent version. This plugin has been developed with SourceMod 1.10, for what it's worth. Once you have downloaded your ZIP, what you'll need to do first is move everything in "NotnHeavy's pre-Gun Mettle reverts\tf\\" to your server's \tf\ directory. Then, if your server also uses FastDL, move everything in "NotnHeavy's pre-Gun Mettle reverts\fastdl\\" to your server's FastDL directory. That's pretty much it! :)
+Head over to the releases tab and download the most recent version. This plugin has been developed with SourceMod 1.11, for what it's worth. Once you have downloaded your ZIP, what you'll need to do first is move everything in "NotnHeavy's pre-Gun Mettle reverts\tf\\" to your server's \tf\ directory. Then, if your server also uses FastDL, move everything in "NotnHeavy's pre-Gun Mettle reverts\fastdl\\" to your server's FastDL directory. That's pretty much it! :)
 
 ## Things that have not been reverted.
 
@@ -23,7 +23,8 @@ This plugin has been influenced not only by my somehow massive interest in TF2's
 
 ## Dependencies:
 - asherkin's TF2Items extension.
-- Dr!fter's DHooks extension (already a part of SourceMod since version 1.11). You'll need a version that has support for detours.
+- Dr!fter's DHooks extension (already a part of SourceMod since version 1.11, so you shouldn't have to worry about downloading it).
+- Scags' SM-Memory extension.
 
 ## Cvars:
 - **notnheavy_gunmettle_reverts_reject_newitems 0-1 (defaults to 1)** - block weapons that were not present before Gun Mettle.
