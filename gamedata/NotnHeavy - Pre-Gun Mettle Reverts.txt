@@ -426,11 +426,6 @@
 				"windows" "400"
 				"linux"	  "400"
 			}
-			"CTFPlayerShared::m_flBurnDuration"
-			{
-				"windows" "520"
-				"linux"   "520"
-			}
 			"CTFPlayerShared::m_flDisguiseCompleteTime"
 			{
 				"windows" "560"

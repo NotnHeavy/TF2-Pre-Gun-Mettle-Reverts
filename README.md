@@ -22,9 +22,11 @@ I haven't reverted weapon models/weapon sounds at the moment either. The Rocket 
 This plugin has been influenced not only by my somehow massive interest in TF2's old mechanics, but also by a plugin called Weapon Reverts by bakugo (https://forums.alliedmods.net/showthread.php?p=2717299). I really enjoyed playing on servers with this plugin, and I thought about writing my own historically-accurate plugin with as many reverts as possible. Thank you bakugo :).
 
 ## Dependencies:
+- My old flamethrower mechanics plugin. Previously, flamethrower-related functionality was included in this plugin, but has now been moved to [here](https://github.com/NotnHeavy/TF2-Old-Flamethrower-Mechanics). 
+- As a dependency of my old flamethrower mechanics plugin, this also requires nosoop's TF2Attributes fork.
+- Used both here and in my old flamethrower mechanics plugin, Scags' SM-Memory extension.
 - asherkin's TF2Items extension.
 - Dr!fter's DHooks extension (already a part of SourceMod since version 1.11, so you shouldn't have to worry about downloading it).
-- Scags' SM-Memory extension.
 
 ## Cvars:
 - **notnheavy_gunmettle_reverts_reject_newitems 0-1 (defaults to 1)** - block weapons that were not present before Gun Mettle.

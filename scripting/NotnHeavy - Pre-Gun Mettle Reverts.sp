@@ -93,6 +93,8 @@
 
 #define MODEL_PRECACHE_TABLENAME "modelprecache"
 
+#define TF_BURNING_FLAME_LIFE_PYRO	0.25		// pyro only displays burning effect momentarily
+
 #define PLUGIN_NAME "NotnHeavy - Pre-Gun Mettle Reverts"
 
 DHookSetup DHooks_GetRadius;
@@ -173,7 +175,6 @@ Address MemoryPatch_ShieldTurnCap_OldValue;
 float MemoryPatch_ShieldTurnCap_NewValue = 1000.00;
 
 Address CTFPlayerShared_m_pOuter;
-Address CTFPlayerShared_m_flBurnDuration;
 Address CTFPlayerShared_m_flDisguiseCompleteTime;
 Address CGameTrace_m_pEnt;
 Address CTakeDamageInfo_m_bitsDamageType;
@@ -201,7 +202,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.2.5",
+    version = "1.3",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -514,8 +515,8 @@ enum BazaarBargainShotManager
 
 enum struct Player
 {
+    float TimeSinceEncounterWithFire;
     int FramesSinceLastSwitch;
-    int FramesSinceEncounterWithFire;
     int TicksSinceHeadshot;
     int TickSinceBonk;
     int MaxHealth;
@@ -545,10 +546,6 @@ enum struct Player
 
     // B.A.S.E. Jumper.
     float TimeSinceDeployment;
-
-    // Afterburn.
-    int LastWeaponIgnite;
-    int TicksSinceAfterburnManualCondition;
 
     // Phlog.
     int TicksSinceMmmphUsage;
@@ -708,6 +705,12 @@ TF2ConVar defaultConVars[] =
     { "tf_feign_death_damage_scale", INVALID_HANDLE, 0, 1.00, TF2ConVarType_Float }, // Don't apply any damage resistance while feigning. It'll ramp down anyway.
     { "tf_feign_death_duration", INVALID_HANDLE, 0, 0.00, TF2ConVarType_Float }, // Don't provide any damage buffs, I'll just handle everything myself.
     { "tf_stealth_damage_reduction", INVALID_HANDLE, 0, 1.0, TF2ConVarType_Float }, // Cloaking does not provide any damage resistance.
+
+    // NotnHeavy's Old Flamethrower Mechanics
+    { "notnheavy_flamethrower_damage", INVALID_HANDLE, 0, 6.80, TF2ConVarType_Float }, // 6.80 flame damage
+    { "notnheavy_flamethrower_falloff", INVALID_HANDLE, 0, 0.60, TF2ConVarType_Float }, // 60% falloff
+    { "notnheavy_flamethrower_oldafterburn_damage", INVALID_HANDLE, 0, 1, TF2ConVarType_Int }, // Use old afterburn damage.
+    { "notnheavy_flamethrower_oldafterburn_duration", INVALID_HANDLE, 0, 1, TF2ConVarType_Int }, // Use old afterburn duration.
 };
 int resistanceMapping[] =
 {
@@ -753,7 +756,7 @@ void SetTF2ConVarValue(char[] name, any value)
 {
     for (int i = 0; i < sizeof(defaultConVars); ++i)
     {
-        if (StrEqual(defaultConVars[i].Name, name))
+        if (StrEqual(defaultConVars[i].Name, name) && defaultConVars[i].Variable != INVALID_HANDLE)
         {
             if (defaultConVars[i].Type == TF2ConVarType_Int)
                 SetConVarInt(defaultConVars[i].Variable, value);
@@ -935,7 +938,6 @@ public void OnPluginStart()
 
     // Offsets.
     CTFPlayerShared_m_pOuter = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_pOuter"));
-    CTFPlayerShared_m_flBurnDuration = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_flBurnDuration"));
     CTFPlayerShared_m_flDisguiseCompleteTime = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_flDisguiseCompleteTime"));
     CGameTrace_m_pEnt = view_as<Address>(GameConfGetOffset(config, "CGameTrace::m_pEnt"));
     CTakeDamageInfo_m_bitsDamageType = view_as<Address>(GameConfGetOffset(config, "CTakeDamageInfo::m_bitsDamageType"));
@@ -956,10 +958,13 @@ public void OnPluginStart()
     for (int i = 0; i < sizeof(defaultConVars); ++i)
     {
         defaultConVars[i].Variable = FindConVar(defaultConVars[i].Name);
-        if (defaultConVars[i].Type == TF2ConVarType_Int)
-            defaultConVars[i].DefaultValue = GetConVarInt(defaultConVars[i].Variable);
-        else if (defaultConVars[i].Type == TF2ConVarType_Float)
-            defaultConVars[i].DefaultValue = GetConVarFloat(defaultConVars[i].Variable);
+        if (defaultConVars[i].Variable != INVALID_HANDLE)
+        {
+            if (defaultConVars[i].Type == TF2ConVarType_Int)
+                defaultConVars[i].DefaultValue = GetConVarInt(defaultConVars[i].Variable);
+            else if (defaultConVars[i].Type == TF2ConVarType_Float)
+                defaultConVars[i].DefaultValue = GetConVarFloat(defaultConVars[i].Variable);
+        }
     }
 
     // Hook onto entities.
@@ -1271,7 +1276,7 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
         }
     }
 
-    // Pyro. (:D) TODO: For any weapon that sets players on fire, set afterburn duration to 10s (20 ticks).
+    // Pyro. (:D)
     {
         // Primary.
         {
@@ -1293,7 +1298,7 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
                 // Apply new attributes.
                 TF2Items_SetAttribute(newItem, 5, 178, 0.35); // 65% faster weapon switch
                 TF2Items_SetAttribute(newItem, 6, 1, 0.9); // 10% damage penalty 
-                TF2Items_SetAttribute(newItem, 7, 72, 0.5); // 25% afterburn damage penalty. May make use of this eventually, rather than hardcode it.
+                TF2Items_SetAttribute(newItem, 7, 72, 0.5); // 25% afterburn damage penalty.
 
                 TF2Items_SetNumAttributes(newItem, 8);
             }
@@ -1417,9 +1422,10 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
             {
                 // Apply new attributes.
                 TF2Items_SetAttribute(newItem, 1, 64, 0.60); // +40% explosive damage resistance on wearer
+                TF2Items_SetAttribute(newItem, 2, 527, 1.00); // Immune to the effects of afterburn.
                 
-                // Afterburn immunity is dealt with separately.
-                TF2Items_SetNumAttributes(newItem, 2);
+                // Afterburn immunity is dealt with in my old flamethrower mechanics plugin.
+                TF2Items_SetNumAttributes(newItem, 3);
             }
             else if (index == 265) // Sticky Jumper.
             {
@@ -1780,7 +1786,7 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
             {
                 // Remove old attributes.
                 TF2Items_SetAttribute(newItem, 1, 60, 1.00); // +0% fire damage resistance on wearer
-                TF2Items_SetAttribute(newItem, 2, 527, 0.00); // Immune to the affects of afterburn.
+                TF2Items_SetAttribute(newItem, 2, 527, 0.00); // Immune to the effects of afterburn.
 
                 // Apply new attributes.
                 TF2Items_SetAttribute(newItem, 3, 65, 1.20); // 20% explosive damage vulnerability on wearer
@@ -2060,6 +2066,7 @@ void StructuriseWeaponList(int client)
     }
 
     // Iterate through wearables.
+    /*
     for (int entity = MAXPLAYERS; entity < MAX_ENTITY_COUNT; ++entity)
     {
         if (IsValidEntity(entity))
@@ -2069,6 +2076,13 @@ void StructuriseWeaponList(int client)
             if (StrContains(class, "tf_wearable") != -1 && GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
                 RegisterToWeaponList(client, entity);
         }
+    }
+    */
+    Address m_hMyWearables = GetEntityAddress(client) + view_as<Address>(FindSendPropInfo("CTFPlayer", "m_hMyWearables"));
+    for (int i = 0; i < Dereference(m_hMyWearables + view_as<Address>(12)); ++i)
+    {
+        int entity = LoadEntityHandleFromAddress(view_as<Address>(Dereference(m_hMyWearables) + i * 4));
+        RegisterToWeaponList(client, entity);
     }
 }
 
@@ -2168,7 +2182,7 @@ int GetFeignBuffsEnd(int client)
 int CreateWearable(bool createViewmodel = false)
 {
     int wearable = CreateEntityByName(createViewmodel ? "tf_wearable_vm" : "tf_wearable");
-    SetEntProp(wearable, Prop_Send, "m_iItemDefinitionIndex", 65535);
+    SetEntProp(wearable, Prop_Send, "m_iItemDefinitionIndex", 0xFFFF);
     DispatchSpawn(wearable);
     return wearable;
 }
@@ -2459,6 +2473,8 @@ public void OnGameFrame()
     static int frame = 0; // Looks nicer than a global variable.
     ++frame;
 
+    PrintToServer("%f", GetGameFrameTime ());
+
     // ConVars. (I don't know why but these just get reset...)
     for (int i = 0; i < sizeof(defaultConVars); ++i)
         SetTF2ConVarValue(defaultConVars[i].Name, defaultConVars[i].NewValue);
@@ -2488,21 +2504,8 @@ public void OnGameFrame()
             int doesHaveWeapon;
             int secondaryWeapon = GetPlayerWeaponSlot(i, TFWeaponSlot_Secondary);
             ++allPlayers[i].FramesSinceLastSwitch;
-            ++allPlayers[i].FramesSinceEncounterWithFire;
             if (allPlayers[i].SpreadRecovery > 0)
                 --allPlayers[i].SpreadRecovery;
-
-            // Afterburn immunity.
-            if (TF2_GetPlayerClass(i) == TFClass_Pyro || DoesPlayerHaveItem(i, 131)) // Player is Pyro or has Chargin' Targe.
-            {
-                if (allPlayers[i].FramesSinceEncounterWithFire >= TICK_RATE / 3 && TF2_IsPlayerInCondition(i, TFCond_OnFire)) // ~1/3s. Pyro afterburn only lasts roughly 1/3s, not 1/2s.
-                    TF2_RemoveCondition(i, TFCond_OnFire);
-                else if (allPlayers[i].FramesSinceEncounterWithFire < TICK_RATE / 3 && !TF2_IsPlayerInCondition(i, TFCond_OnFire)) // Valve decided that "afterburn" on Pyros should not be reset if they're still going through the one tick of "afterburn". Their "afterburn" was reset prior to Jungle Inferno, hence why this is here.
-                {
-                    TF2_AddCondition(i, TFCond_OnFire);
-                    allPlayers[i].TicksSinceAfterburnManualCondition = GetGameTickCount();
-                }
-            }
 
             // BONK! consumption.
             if (TF2_IsPlayerInCondition(i, TFCond_Bonked))
@@ -2875,15 +2878,14 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
 
     if ((damagetype & DMG_IGNITE || index == 348) && ((attacker != victim && GetClientTeam(attacker) != GetClientTeam(victim)) || attacker == victim) && !IsInvulnerable(victim) && !TF2_IsPlayerInCondition(victim, TFCond_FireImmune)) // Anything that causes fire.
     {
-        allPlayers[victim].FramesSinceEncounterWithFire = 0;
-        allPlayers[victim].LastWeaponIgnite = index; // Different weapons have different afterburn duration/afterburn damage.
+        allPlayers[victim].TimeSinceEncounterWithFire = GetGameTime();
         returnValue = Plugin_Changed;
     }
 
     if (IsValidEntity(weapon)) 
     {
         if (index == 415 && GetEntityFlags(victim) & (FL_ONGROUND | FL_INWATER) == 0 && allPlayers[attacker].FramesSinceLastSwitch < TICK_RATE * 5) // Reserve Shooter mini-crit. This only works if it hasn't been 5 seconds since equipping the Reserve Shooter.
-            TF2_AddCondition(victim, TFCond_MarkedForDeathSilent, TICK_RATE_PRECISION, inflictor); // Thanks SM for making it so (damagetype & DMG_CRIT) means either mini-crit or crit, and (damagetype |= DMG_CRIT) would just make it.... crit.
+            TF2_AddCondition(victim, TFCond_MarkedForDeathSilent, TICK_RATE_PRECISION, inflictor);
         if ((index == 228 || index == 1085) && attacker != victim) // Black Box hit.
         {
             // Show that attacker got healed.
@@ -3023,7 +3025,7 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
 
             // Set the charge impact damage. Previously it did not have rampup.
             damage = 50 * (1.0 + intMin(GetEntProp(attacker, Prop_Send, "m_iDecapitations"), 5) * 0.2);
-            if (index == 406) // Increase charge damage by 70%. Much like afterburn, I should probably find a way to hook onto attributes without hardcoding numbers.
+            if (index == 406) // Increase charge damage by 70%. I should probably find a way to hook onto attributes without hardcoding numbers.
                 damage *= 1.7;
             
             returnValue = Plugin_Changed;
@@ -3085,13 +3087,6 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
 
     if (damagetype & DMG_FALL) // Fall damage.
         allPlayers[victim].TicksSinceFallDamage = GetGameTickCount();
-
-    if (damagetype & DMG_BURN) // Afterburn.
-    {
-        if (damage == 4) // Normal afterburn, not from the hadukan taunt.
-            damage = allPlayers[victim].LastWeaponIgnite == 215 ? 2.25 : 3.00; // Why 2.25? Because 3 * 0.75 = 2.25. Probably best to find a way to hook onto the afterburn damage attribute and get the value but this also works.
-        returnValue = Plugin_Changed;
-    }
 
     // Dead Ringer damage modification and feign checks.
     if (GetEntProp(victim, Prop_Send, "m_bFeignDeathReady") && !allPlayers[victim].FeigningDeath)
@@ -3205,7 +3200,6 @@ Action ClientDamagedAlive(int victim, int &attacker, int &inflictor, float &dama
 
 void AfterClientDamaged(int victim, int attacker, int inflictor, float damage, int damagetype, int weapon, const float damageForce[3], const float damagePosition[3], int damagecustom)
 {
-    Address shared = GetEntityAddress(victim) + view_as<Address>(FindSendPropInfo("CTFPlayer", "m_Shared"));
     int victimActiveWeapon = GetEntPropEnt(victim, Prop_Send, "m_hActiveWeapon");
     if (IsValidEntity(victimActiveWeapon) && GetWeaponIndex(victimActiveWeapon) == 649 && damagetype & (DMG_IGNITE | DMG_BURN)) // Spy-cicle fire immunity.
     {
@@ -3266,8 +3260,6 @@ void AfterClientDamaged(int victim, int attacker, int inflictor, float damage, i
         float newCharge = GetEntPropFloat(victim, Prop_Send, "m_flChargeMeter") - damage * 3;
         SetEntPropFloat(victim, Prop_Send, "m_flChargeMeter", newCharge < 0.00 ? 0.00 : newCharge);
     }
-    if (allPlayers[victim].FramesSinceEncounterWithFire == 0 && shared != Address_Null && !TF2_IsPlayerInCondition(victim, TFCond_FireImmune)) // Set 10s afterburn (or 6s with the Cow Mangler).
-        WriteToValue(shared + CTFPlayerShared_m_flBurnDuration, allPlayers[victim].LastWeaponIgnite == 441 ? 6.0 : 10.0);
     if (allPlayers[victim].TicksSinceFeignReady == GetGameTickCount()) // Set the cloak meter to 100 when feigning.
         SetEntPropFloat(victim, Prop_Send, "m_flCloakMeter", 100.00);
 
@@ -3313,7 +3305,7 @@ MRESReturn GetProjectileExplosionRadius(int entity, DHookReturn returnValue)
     int index = GetWeaponIndex(GetEntPropEnt(entity, Prop_Send, "m_hLauncher"));
     if (index == 1104 && TF2_IsPlayerInCondition(GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity"), TFCond_BlastJumping)) // Do not reduce rocket radius while rocket jumping with the Air Strike.
     {
-        returnValue.Value = view_as<float>(returnValue.Value) / 0.80; // Need to use view_as<float> because otherwise floating point arithmetic will just shit itself with DHooks. Think this is fixed with a newer version, but I'm not using SM 1.11.
+        returnValue.Value = view_as<float>(returnValue.Value) / 0.80;
         return MRES_Override;
     }
     else if (index == 351 || index == 740) // Use old Detonator/Scorch Shot explosion radius.
@@ -4172,14 +4164,6 @@ public Action SoundPlayed(int clients[MAXPLAYERS], int& numClients, char sample[
                 }
                 return Plugin_Stop;
             }
-        }
-    }
-    else if (StrContains(sample, "flame_engulf") != -1)
-    {
-        for (int i = 1; i <= MaxClients; ++i)
-        {
-            if (allPlayers[i].TicksSinceAfterburnManualCondition + 1 == GetGameTickCount()) // Don't spam the flame engulf sound if adding the on fire condition on players with afterburn immunity.
-                return Plugin_Stop;
         }
     }
     else if (StrContains(sample, "PainSevere") != -1)
