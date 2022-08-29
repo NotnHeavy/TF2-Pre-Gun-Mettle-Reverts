@@ -2473,8 +2473,6 @@ public void OnGameFrame()
     static int frame = 0; // Looks nicer than a global variable.
     ++frame;
 
-    PrintToServer("%f", GetGameFrameTime ());
-
     // ConVars. (I don't know why but these just get reset...)
     for (int i = 0; i < sizeof(defaultConVars); ++i)
         SetTF2ConVarValue(defaultConVars[i].Name, defaultConVars[i].NewValue);
