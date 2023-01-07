@@ -1950,7 +1950,7 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
 
             // Mini-crit attribute is handled by ClientDamaged: all airborne targets should be mini-critted.
         }
-        else if (index == 1153) // Panic Attack. THE HOLD FIRE TO LOAD UP TO 4 SHELLS ATTRIBUTE DOES NOT WORK.
+        else if (index == 1153) // Panic Attack.
         {
             // Remove old attributes.
             TF2Items_SetAttribute(newItem, 1, 1, 1.00); // 0% damage penalty

@@ -285,151 +285,151 @@
 
 			"GetRadius"
 			{
-				"windows" "240"
-				"linux"   "241"
+				"windows" "243"
+				"linux"   "244"
 			}
 
 			"CTFWeaponBase::FinishReload"
 			{
-				"windows" "278"
-				"linux"   "284"
+				"windows" "281"
+				"linux"   "287"
 			}
 			"CTFWeaponBase::Reload"
-			{
-				"windows" "280"
-				"linux"   "286"
-			}
-			"CTFWeaponBase::PrimaryAttack"
 			{
 				"windows" "283"
 				"linux"   "289"
 			}
+			"CTFWeaponBase::PrimaryAttack"
+			{
+				"windows" "286"
+				"linux"   "292"
+			}
 			"CTFWeaponBase::SecondaryAttack"
 			{
-				"windows" "284"
-				"linux"   "290"
+				"windows" "287"
+				"linux"   "293"
 			}
 			"CTFWeaponBase::GetSpeedMod"
 			{
-				"windows" "470"
-				"linux"   "477"
+				"windows" "435"
+				"linux"   "442"
 			}
 
 			"CTFMinigun::GetWeaponSpread"
 			{
-				"windows" "475"
-				"linux"   "482"
+				"windows" "479"
+				"linux"   "486"
 			}
 			"CTFMinigun::GetProjectileDamage"
 			{
-				"windows" "481"
-				"linux"   "488"
+				"windows" "485"
+				"linux"   "492"
 			}
 			"CTFSniperRifleDecap::SniperRifleChargeRateMod"
 			{
-				"windows" "491"
-				"linux" "498"
+				"windows" "495"
+				"linux"   "502"
 			}
 
 			"CTFBall_Ornament::Explode"
 			{
-				"windows" "232"
-				"linux"   "233"
+				"windows" "235"
+				"linux"   "236"
 			}
 
 			"CTFPlayer::EquipWearable"
 			{
-				"windows" "435"
-				"linux"   "436"
+				"windows" "438"
+				"linux"   "439"
 			}
 
 			"CAmmoPack::MyTouch"
 			{
-				"windows" "225"
-				"linux"   "226"
+				"windows" "228"
+				"linux"   "229"
 			}	
 			"CAmmoPack::GetPowerupSize"
 			{
-				"windows" "230"
-				"linux"   "233"
+				"windows" "233"
+				"linux"   "236"
 			}
 
 			"CTFItem::GetItemID"
 			{
-				"windows" "227"
-				"linux"   "265"
+				"windows" "230"
+				"linux"   "238"
 			}
 
 			"CTFWrench::Equip"
 			{
-				"windows" "230"
-				"linux"   "236"
+				"windows" "233"
+				"linux"   "239"
 			}
 			"CTFWrench::Detach"
 			{
-				"windows" "267"
-				"linux"   "273"
+				"windows" "270"
+				"linux"   "276"
 			}
 
 			"CWeaponMedigun::CanAttack"
 			{
-				"windows" "421"
-				"linux"   "428"
+				"windows" "425"
+				"linux"   "432"
 			}
 			"CWeaponMedigun::ItemPostFrame"
 			{
-				"windows" "269"
-				"linux"   "275"
+				"windows" "272"
+				"linux"   "278"
 			}
 
 			"CBaseObject::DetonateObject"
 			{
-				"windows" "348"
-				"linux"   "350"
+				"windows" "351"
+				"linux"   "353"
 			}
 			"CBaseObject::Command_Repair"
 			{
-				"windows" "363"
-				"linux"   "365"
+				"windows" "366"
+				"linux"   "368"
 			}
 			"CBaseObject::StartBuilding"
 			{
-				"windows" "338"
-				"linux"   "340"
+				"windows" "341"
+				"linux"   "343"
 			}
 			"CBaseObject::Construct"
 			{
-				"windows" "346"
-				"linux"   "348"
+				"windows" "349"
+				"linux"   "351"
 			}
 			
 			"CObjectSapper::FinishedBuilding"
 			{
-				"windows" "340"
-				"linux"   "342"
+				"windows" "343"
+				"linux"   "345"
 			}
 
 			"CObjectSentrygun::OnWrenchHit"
 			{
-				"windows" "361"
-				"linux"   "363"
+				"windows" "364"
+				"linux"   "366"
 			}
 
 			"CTFProjectile_HealingBolt::ImpactTeamPlayer"
 			{
-				"windows" "252"
-				"linux"   "255"
+				"windows" "255"
+				"linux"   "258"
 			}
 
 			"CTFPlayerShared::m_pOuter"
 			{
-				"windows" "400"
-				"linux"	  "400"
+				"windows" "396"
+				"linux"	  "396"
 			}
 			"CTFPlayerShared::m_flDisguiseCompleteTime"
 			{
-				"windows" "560"
-				"linux"   "560"
+				"windows" "556"
+				"linux"   "556"
 			}
 
 			"CGameTrace::m_pEnt"
