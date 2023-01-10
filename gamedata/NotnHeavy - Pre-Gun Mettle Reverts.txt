@@ -15,6 +15,28 @@
 					"signature" "CTFPlayerMove::SetupMove"
 				}
 			}
+			"MemoryPatch_NormalScorchShotKnockback"
+			{
+				"windows"
+				{
+					"signature" "CTFProjectile_Flare::Explode"
+				}
+				"linux"
+				{
+					"signature" "CTFProjectile_Flare::Explode"
+				}
+			}
+			"MemoryPatch_DisableDebuffShortenWhilstCloaked"
+			{
+				"windows"
+				{
+					"signature" "CTFPlayerShared::UpdateCloakMeter"
+				}
+				"linux"
+				{
+					"signature" "CTFPlayerShared::UpdateCloakMeter"
+				}
+			}
 		}
 		"Signatures"
 		{
@@ -38,10 +60,17 @@
 				"linux"   "@_Z18GetPlayerClassDataj"
 			}
 
-			"CTeamplayRoundBasedRules::GetActiveRoundTimer"
+			"CTFProjectile_Flare::Explode"
 			{
 				"library" "server"
-				"windows" "\xA1\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\x68\x2A\x2A\x2A\x2A\x6A\x00\xFF\xB0\x58\x03\x00\x00"
+				"windows" "\x53\x8B\xDC\x83\xEC\x08\x83\xE4\xF0\x83\xC4\x04\x55\x8B\x6B\x04\x89\x6C\x24\x04\x8B\xEC\x81\xEC\x58\x01\x00\x00\x56\x57\x8B\xF9\x8B\x87\x3C\x01\x00\x00" // xrefs to string "Rubber.BulletImpact"
+				"linux"   "@_ZN19CTFProjectile_Flare7ExplodeEP10CGameTraceP11CBaseEntity"
+			}
+
+			"CTeamplayRoundBasedRules::GetActiveRoundTimer" // aMinigameWin "minigame_win", go to first explicit func call
+			{
+				"library" "server"
+				"windows" "\xA1\x2A\x2A\x2A\x2A\x6A\x00\x68\x2A\x2A\x2A\x2A\x68\x2A\x2A\x2A\x2A\x6A\x00\xFF\xB0\x84\x03\x00\x00"
 				"linux"   "@_ZN24CTeamplayRoundBasedRules19GetActiveRoundTimerEv"
 			}
 			"CTFPlayer::TeamFortress_CalculateMaxSpeed"
@@ -50,10 +79,10 @@
 				"windows" "\x55\x8B\xEC\x83\xEC\x18\x83\x3D\x2A\x2A\x2A\x2A\x00"
 				"linux"	  "@_ZNK9CTFPlayer30TeamFortress_CalculateMaxSpeedEb"
 			}
-			"CTFPlayer::CanAirDash"
+			"CTFPlayer::CanAirDash" // offset aSetScoutDouble ; "set_scout_doublejump_disabled"
 			{
 				"library" "server"
-				"windows" "\x55\x8B\xEC\x83\xEC\x08\x57\x8B\xF9\xF7\x87\x84\x1A\x00\x00\x00\x00\x04\x00"
+				"windows" "\x55\x8B\xEC\x83\xEC\x08\x57\x8B\xF9\xF7\x87\xB4\x1B\x00\x00\x00\x00\x04\x00"
 				"linux"   "@_ZNK9CTFPlayer10CanAirDashEv"
 			}
 			"CTFPlayer::Taunt"
@@ -98,11 +127,17 @@
 				"windows" "\x55\x8B\xEC\x6A\x07"
 				"linux"   "@_ZN9CTFPlayer13AddToSpyKnifeEfb"
 			}
-
-			"CTFPlayerShared::AddCond"
+			"CTFPlayer::OnTakeDamage_Alive"
 			{
 				"library" "server"
-				"windows" "\x55\x8B\xEC\x83\xEC\x08\x56\x8B\xF1\x8B\x8E\x90\x01\x00\x00\x85\xC9"
+				"windows" "\x55\x8B\xEC\x83\xEC\x2A\x56\x57\x8B\xF9\x8B\x0D\x2A\x2A\x2A\x2A\x89\x7D\x2A"
+				"linux"   "@_ZN9CTFPlayer18OnTakeDamage_AliveERK15CTakeDamageInfo"
+			}
+
+			"CTFPlayerShared::AddCond" // offset aJarateBackstab ; "jarate_backstabber", go to call that looks like AddCond (last time checked, 2nd from offset)
+			{
+				"library" "server"
+				"windows" "\x55\x8B\xEC\x83\xEC\x08\x56\x8B\xF1\x8B\x8E\x8C\x01\x00\x00\x85\xC9"
 				"linux"   "@_ZN15CTFPlayerShared7AddCondE7ETFCondfP11CBaseEntity"
 			}
 			"CTFPlayerShared::RemoveCond"
@@ -117,10 +152,10 @@
 				"windows" "\x55\x8B\xEC\x83\xEC\x08\x56\x57\x8B\x7D\x08\x8B\xF1\x83\xFF\x20"
 				"linux"   "@_ZNK15CTFPlayerShared6InCondE7ETFCond"
 			}
-			"CTFPlayerShared::ModifyRage"
+			"CTFPlayerShared::ModifyRage" // aRageOnHit "rage_on_hit", go to subroutine (2nd line down previously) that is just a one-liner func call
 			{
 				"library" "server"
-				"windows" "\x55\x8B\xEC\xF3\x0F\x10\x81\x8C\x02\x00\x00"
+				"windows" "\x55\x8B\xEC\xF3\x0F\x10\x81\x88\x02\x00\x00"
 				"linux"	  "@_ZN15CTFPlayerShared10ModifyRageEf"
 			}
 			"CTFPlayerShared::CalcChargeCrit"
@@ -147,16 +182,16 @@
 				"windows" "\x55\x8B\xEC\x53\x56\x57\x8B\xF9\xB3\x01" // some functions are a literal nuisance to find i swear
 				"linux"   "@_ZNK15CTFPlayerShared29CanRecieveMedigunChargeEffectE20medigun_charge_types"
 			}
-			"CTFPlayerShared::Disguise"
+			"CTFPlayerShared::Disguise" // offset aModDisguiseCon ; "mod_disguise_consumes_cloak"
 			{
 				"library" "server"
-				"windows" "\x55\x8B\xEC\x83\xEC\x24\x56\x57\x8B\xF9\x8B\x8F\x90\x01\x00\x00"
+				"windows" "\x55\x8B\xEC\x83\xEC\x24\x56\x57\x8B\xF9\x8B\x8F\x8C\x01\x00\x00"
 				"linux"   "@_ZN15CTFPlayerShared8DisguiseEiiP9CTFPlayerb"
 			}
 			"CTFPlayerShared::UpdateCloakMeter"
 			{
 				"library" "server"
-				"windows" "\x55\x8B\xEC\x83\xEC\x18\x56\x8B\xF1\x6A\x08" // i had to go through like 5 functions for this. turns out each function was the first call in each other LOL
+				"windows" "\x55\x8B\xEC\x83\xEC\x18\x56\x8B\xF1\x6A\x08" // i had to go through like 5 functions for this. turns out each function was the first call in each other LOL (aHypeDecaysOver db 'hype_decays_over_time')
 				"linux"   "@_ZN15CTFPlayerShared16UpdateCloakMeterEv"
 			}
 
@@ -174,18 +209,19 @@
 				"linux"   "@_ZN9CTFWrench20GetConstructionValueEv"
 			}
 
-			"CTFWearable::Break"
+			"CTFWearable::Break" // offset aSetBlockbackst ; "set_blockbackstab_once", below 2nd vtable reference, it should be 1nd func call
 			{
 				"library" "server"
 				// get a load of this guy
-				"windows" "\x55\x8B\xEC\x83\xEC\x20\x56\x8B\xF1\x8B\x86\x14\x01\x00\x00\xC1\xE8\x0B\xA8\x01\x74\x2A\xE8\x2A\x2A\x2A\x2A\x57\x8D\x4D\xE0\xE8\x2A\x2A\x2A\x2A\x8D\xBE\x90\x02\x00\x00\xC7\x45\xE0\x2A\x2A\x2A\x2A\x57\x8D\x4D\xE0\xE8\x2A\x2A\x2A\x2A\x8D\x45\xE0\x68\x2A\x2A\x2A\x2A\x50\xE8\x2A\x2A\x2A\x2A\x8B\x06\x83\xC4\x08\x8B\xCE\xFF\x50\x18\x50\xE8\x2A\x2A\x2A\x2A\x8B\x86\x14\x01\x00\x00\x83\xC4\x04\xC1\xE8\x0B\xA8\x01\x74\x2A\x8B\xCE\xE8\x2A\x2A\x2A\x2A\x57\xE8\x2A\x2A\x2A\x2A\x8B\x86\x14\x01\x00\x00\x83\xC4\x04\xC1\xE8\x0B\x5F\xA8\x01\x74\x2A\x8B\xCE\xE8\x2A\x2A\x2A\x2A\x8D\x86\x0C\x03\x00\x00\x50\xE8\x2A\x2A\x2A\x2A\x8B\x06"
+				//"windows" "\x55\x8B\xEC\x83\xEC\x20\x56\x8B\xF1\x8B\x86\x14\x01\x00\x00\xC1\xE8\x0B\xA8\x01\x74\x2A\xE8\x2A\x2A\x2A\x2A\x57\x8D\x4D\xE0\xE8\x2A\x2A\x2A\x2A\x8D\xBE\x90\x02\x00\x00\xC7\x45\xE0\x2A\x2A\x2A\x2A\x57\x8D\x4D\xE0\xE8\x2A\x2A\x2A\x2A\x8D\x45\xE0\x68\x2A\x2A\x2A\x2A\x50\xE8\x2A\x2A\x2A\x2A\x8B\x06\x83\xC4\x08\x8B\xCE\xFF\x50\x18\x50\xE8\x2A\x2A\x2A\x2A\x8B\x86\x14\x01\x00\x00\x83\xC4\x04\xC1\xE8\x0B\xA8\x01\x74\x2A\x8B\xCE\xE8\x2A\x2A\x2A\x2A\x57\xE8\x2A\x2A\x2A\x2A\x8B\x86\x14\x01\x00\x00\x83\xC4\x04\xC1\xE8\x0B\x5F\xA8\x01\x74\x2A\x8B\xCE\xE8\x2A\x2A\x2A\x2A\x8D\x86\x0C\x03\x00\x00\x50\xE8\x2A\x2A\x2A\x2A\x8B\x06"
+				"windows" "\x55\x8B\xEC\x83\xEC\x20\x56\x8B\xF1\x8B\x86\x3C\x01\x00\x00\xC1\xE8\x0B\xA8\x01\x74\x2A\xE8\x2A\x2A\x2A\x2A\x57\x8D\x4D\xE0\xE8\x2A\x2A\x2A\x2A\x8D\xBE\xB8\x02\x00\x00\xC7\x45\xE0\x2A\x2A\x2A\x2A\x57\x8D\x4D\xE0\xE8\x2A\x2A\x2A\x2A\x8D\x45\xE0\x68\x2A\x2A\x2A\x2A\x50\xE8\x2A\x2A\x2A\x2A\x8B\x06\x83\xC4\x08\x8B\xCE\xFF\x50\x18\x50\xE8\x2A\x2A\x2A\x2A\x8B\x86\x3C\x01\x00\x00\x83\xC4\x04\xC1\xE8\x0B\xA8\x01\x74\x2A\x8B\xCE\xE8\x2A\x2A\x2A\x2A\x57\xE8\x2A\x2A\x2A\x2A\x8B\x86\x3C\x01\x00\x00\x83\xC4\x04\xC1\xE8\x0B\x5F\xA8\x01\x74\x2A\x8B\xCE\xE8\x2A\x2A\x2A\x2A\x8D\x86\x34\x03\x00\x00\x50\xE8\x2A\x2A\x2A\x2A\x8B\x06"
 				"linux"   "@_ZN11CTFWearable5BreakEv"
 			}
 
-			"CTFWearableDemoShield::ShieldBash"
+			"CTFWearableDemoShield::ShieldBash" /// offset aDemochargeHitf_0 ; "DemoCharge.HitFleshRange", not the precache function
 			{
 				"library" "server"
-				"windows" "\x55\x8B\xEC\x81\xEC\xFC\x00\x00\x00\x56"
+				"windows" "\x55\x8B\xEC\x81\xEC\xFC\x00\x00\x00\x57\x8B\xF9\x8B\x97\x10\x02\x00\x00"
 				"linux"   "@_ZN21CTFWearableDemoShield10ShieldBashEP9CTFPlayerf"
 			}
 
@@ -254,10 +290,10 @@
 				"windows" "\x80\xB9\x20\x0A\x00\x00\x00\x74\x2A"
 				"linux"   "@_ZN11CBaseObject36GetReversesBuildingConstructionSpeedEv"
 			}
-			"CBaseObject::CreateAmmoPack"
+			"CBaseObject::CreateAmmoPack" // offset aModelsWeaponsW_11 ; "models/weapons/w_models/w_toolbox.mdl", not in pre-cache, first func call below
 			{
 				"library" "server"
-				"windows" "\x55\x8B\xEC\x83\xEC\x24\x56\x57\x8B\xF9\x8B\x87\x14\x01\x00\x00"
+				"windows" "\x55\x8B\xEC\x83\xEC\x24\x56\x57\x8B\xF9\x8B\x87\x3C\x01\x00\x00"
 				"linux"   "@_ZN11CBaseObject14CreateAmmoPackEPKci"
 			}
 
@@ -281,6 +317,18 @@
 			{
 				"windows" "139"
 				"linux"   "140"
+			}
+
+			"MemoryPatch_NormalScorchShotKnockback"
+			{
+				"windows" "763"
+				"linux"   "5244"
+			}
+
+			"MemoryPatch_DisableDebuffShortenWhilstCloaked"
+			{
+				"windows" "767"
+				"linux"   "295"
 			}
 
 			"GetRadius"
@@ -774,6 +822,20 @@
 					"force"
 					{
 						"type" "bool"
+					}
+				}
+			}
+			"CTFPlayer::OnTakeDamage_Alive"
+			{
+				"signature"	"CTFPlayer::OnTakeDamage_Alive"
+				"callconv"	"thiscall"
+				"return"	"int" 
+				"this"		"entity"
+				"arguments"
+				{
+					"info"
+					{
+						"type" "int"
 					}
 				}
 			}

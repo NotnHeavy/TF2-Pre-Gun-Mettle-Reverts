@@ -1,3 +1,7 @@
+// todo:
+// vaccinator crit resistance (working on it...)
+// make debuffs not last shorter when cloaked (todo)
+
 //////////////////////////////////////////////////////////////////////////////
 // MADE BY NOTNHEAVY. USES GPL-3, AS PER REQUEST OF SOURCEMOD               //
 //////////////////////////////////////////////////////////////////////////////
@@ -127,9 +131,9 @@ DHookSetup DHooks_CTFPlayer_RegenThink;
 DHookSetup DHooks_CTFPlayer_MedicGetHealTarget;
 DHookSetup DHooks_CTFPlayer_ApplyPunchImpulseX;
 DHookSetup DHooks_CTFPlayer_AddToSpyKnife;
+DHookSetup DHooks_CTFPlayer_OnTakeDamage_Alive;
 DHookSetup DHooks_CTFPlayerShared_AddCond;
 DHookSetup DHooks_CTFPlayerShared_RemoveCond;
-DHookSetup DHooks_CTFPlayerShared_InCond;
 DHookSetup DHooks_CTFPlayerShared_ModifyRage;
 DHookSetup DHooks_CTFPlayerShared_CalcChargeCrit;
 DHookSetup DHooks_CTFPlayerShared_AddToSpyCloakMeter;
@@ -167,6 +171,10 @@ Handle SDKCall_CBaseObject_GetReversesBuildingConstructionSpeed;
 ConVar tf_scout_hype_mod;
 ConVar tf_scout_stunball_base_duration;
 ConVar tf_parachute_maxspeed_onfire_z;
+ConVar tf_weapon_minicrits_distance_falloff;
+ConVar tf_weapon_criticals_distance_falloff;
+bool tf_weapon_minicrits_distance_falloff_original;
+bool tf_weapon_criticals_distance_falloff_original;
 
 ConVar notnheavy_gunmettle_reverts_reject_newitems;
 
@@ -174,10 +182,21 @@ Address MemoryPatch_ShieldTurnCap;
 Address MemoryPatch_ShieldTurnCap_OldValue;
 float MemoryPatch_ShieldTurnCap_NewValue = 1000.00;
 
+Address MemoryPatch_NormalScorchShotKnockback;
+Address MemoryPatch_NormalScorchShotKnockback_oldValue;
+float MemoryPatch_NormalScorchShotKnockback_NewValue = 100.00;
+
+Address MemoryPatch_DisableDebuffShortenWhilstCloaked;
+Address MemoryPatch_DisableDebuffShortenWhilstCloaked_oldValue;
+float MemoryPatch_DisableDebuffShortenWhilstCloaked_NewValue = 1.00;
+
 Address CTFPlayerShared_m_pOuter;
 Address CTFPlayerShared_m_flDisguiseCompleteTime;
 Address CGameTrace_m_pEnt;
+Address CTakeDamageInfo_m_hAttacker;
+Address CTakeDamageInfo_m_flDamage;
 Address CTakeDamageInfo_m_bitsDamageType;
+//Address CTakeDamageInfo_m_flDamageBonus;
 Address CTakeDamageInfo_m_eCritType;
 Address CWeaponMedigun_m_bReloadDown; // *((_BYTE *)this + 2059)
 Address CObjectSentrygun_m_flShieldFadeTime; // *((float *)this + 712)
@@ -821,9 +840,9 @@ public void OnPluginStart()
     DHooks_CTFPlayer_MedicGetHealTarget = DHookCreateFromConf(config, "CTFPlayer::MedicGetHealTarget");
     DHooks_CTFPlayer_ApplyPunchImpulseX = DHookCreateFromConf(config, "CTFPlayer::ApplyPunchImpulseX");
     DHooks_CTFPlayer_AddToSpyKnife = DHookCreateFromConf(config, "CTFPlayer::AddToSpyKnife");
+    DHooks_CTFPlayer_OnTakeDamage_Alive = DHookCreateFromConf(config, "CTFPlayer::OnTakeDamage_Alive");
     DHooks_CTFPlayerShared_AddCond = DHookCreateFromConf(config, "CTFPlayerShared::AddCond");
     DHooks_CTFPlayerShared_RemoveCond = DHookCreateFromConf(config, "CTFPlayerShared::RemoveCond");
-    DHooks_CTFPlayerShared_InCond = DHookCreateFromConf(config, "CTFPlayerShared::InCond");
     DHooks_CTFPlayerShared_ModifyRage = DHookCreateFromConf(config, "CTFPlayerShared::ModifyRage");
     DHooks_CTFPlayerShared_CalcChargeCrit = DHookCreateFromConf(config, "CTFPlayerShared::CalcChargeCrit");
     DHooks_CTFPlayerShared_AddToSpyCloakMeter = DHookCreateFromConf(config, "CTFPlayerShared::AddToSpyCloakMeter");
@@ -855,9 +874,9 @@ public void OnPluginStart()
     DHookEnableDetour(DHooks_CTFPlayer_MedicGetHealTarget, false, GetPlayerHealTarget);
     DHookEnableDetour(DHooks_CTFPlayer_ApplyPunchImpulseX, false, ConfigureSniperFlinching);
     DHookEnableDetour(DHooks_CTFPlayer_AddToSpyKnife, false, AddToSpycicleMeter);
+    DHookEnableDetour(DHooks_CTFPlayer_OnTakeDamage_Alive, false, OnTakeDamageAlive);
     DHookEnableDetour(DHooks_CTFPlayerShared_AddCond, false, AddCondition);
     DHookEnableDetour(DHooks_CTFPlayerShared_RemoveCond, false, RemoveCondition);
-    DHookEnableDetour(DHooks_CTFPlayerShared_InCond, false, IsPlayerInCond);
     DHookEnableDetour(DHooks_CTFPlayerShared_ModifyRage, false, ModifyRageMeter);
     DHookEnableDetour(DHooks_CTFPlayerShared_CalcChargeCrit, false, CalculateChargeCrit);
     DHookEnableDetour(DHooks_CTFPlayerShared_AddToSpyCloakMeter, false, AddToCloak);
@@ -881,6 +900,7 @@ public void OnPluginStart()
     DHookEnableDetour(DHooks_CTFProjectile_Arrow_BuildingHealingArrow, false, PreHealingBoltImpact);
     DHookEnableDetour(DHooks_CTFProjectile_Arrow_BuildingHealingArrow, true, PostHealingBoltImpact);
     DHookEnableDetour(DHooks_CTFGameRules_ApplyOnDamageModifyRules, false, ApplyDamageRules);
+    DHookEnableDetour(DHooks_CTFGameRules_ApplyOnDamageModifyRules, true, ApplyDamageRules_Post);
 
     // SDKCall.
     StartPrepSDKCall(SDKCall_Entity);
@@ -936,12 +956,23 @@ public void OnPluginStart()
     MemoryPatch_ShieldTurnCap_OldValue = LoadFromAddress(MemoryPatch_ShieldTurnCap, NumberType_Int32);
     StoreToAddress(MemoryPatch_ShieldTurnCap, AddressOf(MemoryPatch_ShieldTurnCap_NewValue), NumberType_Int32);
 
+    MemoryPatch_NormalScorchShotKnockback = GameConfGetAddress(config, "MemoryPatch_NormalScorchShotKnockback") + view_as<Address>(GameConfGetOffset(config, "MemoryPatch_NormalScorchShotKnockback"));
+    MemoryPatch_NormalScorchShotKnockback_oldValue = LoadFromAddress(MemoryPatch_NormalScorchShotKnockback, NumberType_Int32);
+    StoreToAddress(MemoryPatch_NormalScorchShotKnockback, AddressOf(MemoryPatch_NormalScorchShotKnockback_NewValue), NumberType_Int32);
+
+    MemoryPatch_DisableDebuffShortenWhilstCloaked = GameConfGetAddress(config, "MemoryPatch_DisableDebuffShortenWhilstCloaked") + view_as<Address>(GameConfGetOffset(config, "MemoryPatch_DisableDebuffShortenWhilstCloaked"));
+    MemoryPatch_DisableDebuffShortenWhilstCloaked_oldValue = LoadFromAddress(MemoryPatch_DisableDebuffShortenWhilstCloaked, NumberType_Int32);
+    StoreToAddress(MemoryPatch_DisableDebuffShortenWhilstCloaked, AddressOf(MemoryPatch_DisableDebuffShortenWhilstCloaked_NewValue), NumberType_Int32);
+
     // Offsets.
     CTFPlayerShared_m_pOuter = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_pOuter"));
     CTFPlayerShared_m_flDisguiseCompleteTime = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_flDisguiseCompleteTime"));
     CGameTrace_m_pEnt = view_as<Address>(GameConfGetOffset(config, "CGameTrace::m_pEnt"));
-    CTakeDamageInfo_m_bitsDamageType = view_as<Address>(GameConfGetOffset(config, "CTakeDamageInfo::m_bitsDamageType"));
-    CTakeDamageInfo_m_eCritType = view_as<Address>(GameConfGetOffset(config, "CTakeDamageInfo::m_eCritType"));
+    CTakeDamageInfo_m_hAttacker = view_as<Address>(40);
+    CTakeDamageInfo_m_flDamage = view_as<Address>(48);
+    CTakeDamageInfo_m_bitsDamageType = view_as<Address>(60); //view_as<Address>(GameConfGetOffset(config, "CTakeDamageInfo::m_bitsDamageType"));
+    //CTakeDamageInfo_m_flDamageBonus = view_as<Address>(84);
+    CTakeDamageInfo_m_eCritType = view_as<Address>(100); //view_as<Address>(GameConfGetOffset(config, "CTakeDamageInfo::m_eCritType"));
     CWeaponMedigun_m_bReloadDown = view_as<Address>(FindSendPropInfo("CWeaponMedigun", "m_nChargeResistType") + 11);
     CObjectSentrygun_m_flShieldFadeTime = view_as<Address>(FindSendPropInfo("CObjectSentrygun", "m_nShieldLevel") + 4);
     CObjectBase_m_flHealth = view_as<Address>(FindSendPropInfo("CBaseObject", "m_bHasSapper") - 4);
@@ -952,6 +983,10 @@ public void OnPluginStart()
     tf_scout_hype_mod = FindConVar("tf_scout_hype_mod");
     tf_scout_stunball_base_duration = FindConVar("tf_scout_stunball_base_duration");
     tf_parachute_maxspeed_onfire_z = FindConVar("tf_parachute_maxspeed_onfire_z");
+    tf_weapon_minicrits_distance_falloff = FindConVar("tf_weapon_minicrits_distance_falloff");
+    tf_weapon_criticals_distance_falloff = FindConVar("tf_weapon_criticals_distance_falloff");
+    tf_weapon_minicrits_distance_falloff_original = tf_weapon_minicrits_distance_falloff.BoolValue;
+    tf_weapon_criticals_distance_falloff_original = tf_weapon_criticals_distance_falloff.BoolValue;
 
     notnheavy_gunmettle_reverts_reject_newitems = CreateConVar("notnheavy_gunmettle_reverts_reject_newitems", "1", "Disable the usage of post-Gun Mettle weapons. On by default.", FCVAR_PROTECTED);
 
@@ -1042,6 +1077,8 @@ public void OnPluginEnd()
 
     // Memory patches.
     StoreToAddress(MemoryPatch_ShieldTurnCap, MemoryPatch_ShieldTurnCap_OldValue, NumberType_Int32);
+    StoreToAddress(MemoryPatch_NormalScorchShotKnockback, MemoryPatch_NormalScorchShotKnockback_oldValue, NumberType_Int32);
+    StoreToAddress(MemoryPatch_DisableDebuffShortenWhilstCloaked, MemoryPatch_DisableDebuffShortenWhilstCloaked_oldValue, NumberType_Int32);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1996,7 +2033,7 @@ int DoesPlayerHaveItem(int player, int index)
     for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
     {
         int entity = allPlayers[player].Weapons[i];
-        if (IsValidEntity(entity) && HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex") && GetWeaponIndex(entity) == index)
+        if (GetWeaponIndex(entity) == index)
             return entity;
     }
     return 0;
@@ -2043,7 +2080,7 @@ void RegisterToWeaponList(int client, int entity)
     allEntities[entity].Owner = client;
     for (int i = 0; i < MAX_WEAPON_COUNT; ++i)
     {
-        if (allPlayers[client].Weapons[i] == 0)
+        if (allPlayers[client].Weapons[i] == 0 && allPlayers[client].Weapons[i] != entity)
         {
             allPlayers[client].Weapons[i] = entity;
             break;
@@ -2066,7 +2103,7 @@ void StructuriseWeaponList(int client)
     }
 
     // Iterate through wearables.
-    /*
+    // Uses a hybrid of both since either will not work sometimes.
     for (int entity = MAXPLAYERS; entity < MAX_ENTITY_COUNT; ++entity)
     {
         if (IsValidEntity(entity))
@@ -2077,7 +2114,6 @@ void StructuriseWeaponList(int client)
                 RegisterToWeaponList(client, entity);
         }
     }
-    */
     Address m_hMyWearables = GetEntityAddress(client) + view_as<Address>(FindSendPropInfo("CTFPlayer", "m_hMyWearables"));
     for (int i = 0; i < Dereference(m_hMyWearables + view_as<Address>(12)); ++i)
     {
@@ -3100,9 +3136,15 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
     return returnValue;
 }
 
-Action ClientDamagedAlive(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3], int damagecustom)
+MRESReturn OnTakeDamageAlive(int entity, DHookReturn returnValue, DHookParam parameters)
 {
-    Action returnValue = Plugin_Continue;
+    Address info = view_as<Address>(parameters.Get(1));
+    int victim = entity;
+    int attacker = LoadEntityHandleFromAddress(info + CTakeDamageInfo_m_hAttacker);
+    int damagetype = Dereference(info + CTakeDamageInfo_m_bitsDamageType);
+    float damage = Dereference(info + CTakeDamageInfo_m_flDamage);
+    //float damagebonus = Dereference(info + CTakeDamageInfo_m_flDamageBonus);
+    ECritType crit = Dereference(info + CTakeDamageInfo_m_eCritType);
 
     // Vaccinator resistances.
     int count = 0;
@@ -3130,7 +3172,6 @@ Action ClientDamagedAlive(int victim, int &attacker, int &inflictor, float &dama
                     }
                     if (allPlayers[victim].ActualCritType != CRIT_NONE)
                     {
-                        returnValue = Plugin_Changed;
                         if (allPlayers[i].UsingVaccinatorUber)
                         {
                             if (damagetype & DMG_BULLET)
@@ -3140,6 +3181,13 @@ Action ClientDamagedAlive(int victim, int &attacker, int &inflictor, float &dama
                             else if (damagetype & DMG_IGNITE)
                                 allPlayers[i].VaccinatorCharge -= 0.01;
                             SetEntPropFloat(vaccinator, Prop_Send, "m_flChargeLevel", max(0.00, allPlayers[i].VaccinatorCharge));
+                            WriteToValue(info + CTakeDamageInfo_m_eCritType, CRIT_NONE);
+                            WriteToValue(info + CTakeDamageInfo_m_bitsDamageType, damagetype & ~DMG_CRIT);
+                            if (crit == CRIT_MINI)
+                                WriteToValue(info + CTakeDamageInfo_m_flDamage, damage / 1.35);
+                            else if (crit == CRIT_FULL)
+                                WriteToValue(info + CTakeDamageInfo_m_flDamage, damage / 3.00);
+                            //WriteToValue(info + CTakeDamageInfo_m_flDamage, damage - damagebonus);
                         }
                     }
                 }
@@ -3148,14 +3196,21 @@ Action ClientDamagedAlive(int victim, int &attacker, int &inflictor, float &dama
                 if (count > 1)
                 {
                     if (allPlayers[i].UsingVaccinatorUber)
-                        damage *= 0.25;
+                        WriteToValue(info + CTakeDamageInfo_m_flDamage, damage * 0.25);
                     else
-                        damage *= 0.90;
-                    returnValue = Plugin_Changed;
+                        WriteToValue(info + CTakeDamageInfo_m_flDamage, damage * 0.90);
                 }
             }
         }
     }
+
+
+    return MRES_Ignored;
+}
+
+Action ClientDamagedAlive(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3], int damagecustom)
+{
+    Action returnValue = Plugin_Continue;
 
     if (TF2_IsPlayerInCondition(victim, TFCond_RestrictToMelee) && TF2_IsPlayerInCondition(victim, TFCond_CritCola) && GetGameTickCount() - allPlayers[victim].TicksSinceConsumingSandvich < TICK_RATE * LUNCHBOX_ADDS_MINICRITS_DURATION) // 25% damage vulnerability when under the effects of the Buffalo Steak Sandvich.
     {
@@ -3773,49 +3828,6 @@ MRESReturn RemoveCondition(Address thisPointer, DHookParam parameters)
     return MRES_Ignored;
 }
 
-MRESReturn IsPlayerInCond(Address thisPointer, DHookReturn returnValue, DHookParam parameters)
-{
-    int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
-    TFCond condition = parameters.Get(1);
-    int weapon = allPlayers[client].TicksSinceProjectileEncounter == GetGameTickCount() && IsValidEdict(allPlayers[client].MostRecentProjectileEncounter) && HasEntProp(allPlayers[client].MostRecentProjectileEncounter, Prop_Send, "m_hLauncher") ? GetEntPropEnt(allPlayers[client].MostRecentProjectileEncounter, Prop_Send, "m_hLauncher") : -1;
-    if (condition == TFCond_OnFire && allPlayers[client].TicksSinceProjectileEncounter == GetGameTickCount() && weapon > 0 && GetWeaponIndex(weapon) == 740) // Do not make knockback greater on burning targets with the Scorch Shot. A bit hacky but it'll work.
-    {
-        returnValue.Value = false;
-        allPlayers[client].TicksSinceProjectileEncounter = 0; // Prevent any further checks.
-        return MRES_Supercede;
-    }
-    else if (condition == TFCond_DefenseBuffed && allPlayers[client].TicksSinceApplyingDamageRules == GetGameTickCount()) // Used for crit prevention with the Vaccinator. Quite hacky but it works.
-    {
-        // This should be called on the first check for TF_COND_DEFENSEBUFF, which is when the crit type is set to CTakeDamageInfo::CRIT_NONE if the damage custom is not a backstab and the damage type is not DMG_CRUSH.
-        // The backstab/damage type checks don't matter because the Vaccinator only resists damage from the damage types DMG_BULLET, DMG_BLAST and DMG_IGNITE/DMG_BURN.
-        Address info = allPlayers[client].DamageInfo;
-        int bitsDamageType = Dereference(info + CTakeDamageInfo_m_bitsDamageType);
-        for (int i = 1; i <= MaxClients; ++i)
-        {
-            if (allPlayers[client].VaccinatorHealers[i] && bitsDamageType & resistanceMapping[GetResistType(DoesPlayerHaveItem(i, 998))])
-            {
-                allPlayers[client].ActualDamageType = bitsDamageType;
-                allPlayers[client].ActualCritType = Dereference(info + CTakeDamageInfo_m_eCritType);
-                allPlayers[client].TicksSinceApplyingDamageRules = 0; // Prevent any further checks.
-                returnValue.Value = true;
-                return MRES_Supercede;
-            }
-        }
-    }
-    else if (allPlayers[client].UpdatingCloakMeter) // Do not shorten the duration of debuffs while cloaking.
-    {
-        for (int i = 0; i < sizeof(g_aDebuffConditions); ++i)
-        {
-            if (condition == g_aDebuffConditions[i])
-            {
-                returnValue.Value = false;
-                return MRES_Supercede;
-            }
-        }
-    }
-    return MRES_Ignored;
-}
-
 MRESReturn CalculateChargeCrit(Address thisPointer, DHookParam parameters)
 {
     int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
@@ -4084,10 +4096,34 @@ MRESReturn ApplyDamageRules(Address thisPointer, DHookReturn returnValue, DHookP
     int victim = parameters.Get(2);
     if (victim > 0 && victim <= MaxClients)
     {
-        allPlayers[victim].TicksSinceApplyingDamageRules = GetGameTickCount();
-        allPlayers[victim].DamageInfo = view_as<Address>(parameters.Get(1));
+        Address info = parameters.Get(1);
+        int bitsDamageType = Dereference(info + CTakeDamageInfo_m_bitsDamageType); // TODO: MAKE SURE THIS WORKS?
+        for (int i = 1; i <= MaxClients; ++i)
+        {
+            if (allPlayers[victim].VaccinatorHealers[i] && bitsDamageType & resistanceMapping[GetResistType(DoesPlayerHaveItem(i, 998))])
+            {
+                allPlayers[victim].TicksSinceApplyingDamageRules = GetGameTickCount();
+                tf_weapon_minicrits_distance_falloff.BoolValue = true;
+                tf_weapon_criticals_distance_falloff.BoolValue = true;
+                break;
+            }
+        }
     }
 
+    return MRES_Ignored;
+}
+
+MRESReturn ApplyDamageRules_Post(Address thisPointer, DHookReturn returnValue, DHookParam parameters)
+{
+    int victim = parameters.Get(2);
+    if (victim > 0 && victim <= MaxClients && allPlayers[victim].TicksSinceApplyingDamageRules == GetGameTickCount())
+    {
+        Address info = parameters.Get(1);
+        allPlayers[victim].ActualDamageType = Dereference(info + CTakeDamageInfo_m_bitsDamageType);
+        allPlayers[victim].ActualCritType = Dereference(info + CTakeDamageInfo_m_eCritType);
+        tf_weapon_minicrits_distance_falloff.BoolValue = tf_weapon_minicrits_distance_falloff_original;
+        tf_weapon_criticals_distance_falloff.BoolValue = tf_weapon_criticals_distance_falloff_original;
+    }
     return MRES_Ignored;
 }
 
