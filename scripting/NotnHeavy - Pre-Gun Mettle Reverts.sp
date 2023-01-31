@@ -31,7 +31,7 @@
 #define TICK_RATE 66
 #define TICK_RATE_PRECISION GetTickInterval()
 #define MAX_ENTITY_COUNT 2048
-#define MAX_WEAPON_COUNT 8
+#define MAX_WEAPON_COUNT 10
 #define MAX_SHORTSTOP_CLIP 4
 #define SCOUT_PISTOL_AMMO_TYPE 2
 #define FLESH_IMPACT_BULLET_COUNT 5
@@ -221,7 +221,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.3",
+    version = "1.4",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -2103,19 +2103,8 @@ void StructuriseWeaponList(int client)
     }
 
     // Iterate through wearables.
-    // Uses a hybrid of both since either will not work sometimes.
-    for (int entity = MAXPLAYERS; entity < MAX_ENTITY_COUNT; ++entity)
-    {
-        if (IsValidEntity(entity))
-        {
-            char class[MAX_NAME_LENGTH]; // This function is also called on plugin start, so this is just to be safe.
-            GetEntityClassname(entity, class, MAX_NAME_LENGTH);
-            if (StrContains(class, "tf_wearable") != -1 && GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity") == client)
-                RegisterToWeaponList(client, entity);
-        }
-    }
     Address m_hMyWearables = GetEntityAddress(client) + view_as<Address>(FindSendPropInfo("CTFPlayer", "m_hMyWearables"));
-    for (int i = 0; i < Dereference(m_hMyWearables + view_as<Address>(12)); ++i)
+    for (int i = 0, size = Dereference(m_hMyWearables + view_as<Address>(12)); i < size; ++i)
     {
         int entity = LoadEntityHandleFromAddress(view_as<Address>(Dereference(m_hMyWearables) + i * 4));
         RegisterToWeaponList(client, entity);
@@ -2470,9 +2459,8 @@ public void OnEntityCreated(int entity, const char[] class)
                 DHookEntity(DHooks_CWeaponMedigun_ItemPostFrame, false, entity, _, MedigunItemPostFrame);
             else if (StrEqual(class, "tf_weapon_sniperrifle_decap"))
                 DHookEntity(DHooks_CTFSniperRifleDecap_SniperRifleChargeRateMod, false, entity, _, GetBazaarBargainChargeRate);
-
-            allEntities[entity].OriginalTF2ItemsIndex = OriginalTF2ItemsIndex;
         }
+        allEntities[entity].OriginalTF2ItemsIndex = OriginalTF2ItemsIndex;
     }
     else if (StrEqual(class, "tf_projectile_ball_ornament"))
         DHookEntity(DHooks_CTFBall_Ornament_Explode, false, entity, _, OrnamentExplode);
