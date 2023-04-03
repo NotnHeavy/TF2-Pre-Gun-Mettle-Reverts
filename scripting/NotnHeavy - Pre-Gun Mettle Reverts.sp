@@ -1,6 +1,5 @@
-// todo:
-// vaccinator crit resistance (working on it...)
-// make debuffs not last shorter when cloaked (todo)
+// i think all i'll do from now on here is just maintain this code and see if i can optimise things.
+// otherwise i'll be working on meet the team fortress
 
 //////////////////////////////////////////////////////////////////////////////
 // MADE BY NOTNHEAVY. USES GPL-3, AS PER REQUEST OF SOURCEMOD               //
@@ -160,8 +159,8 @@ Handle SDKCall_CTFPlayer_EquipWearable;
 Handle SDKCall_CTFItem_GetItemID;
 Handle SDKCall_CWeaponMedigun_CanAttack;
 Handle SDKCall_CBaseObject_DetonateObject;
+Handle SDKCall_CBaseObject_GetType;
 
-Handle SDKCall_CTFPlayer_GetObjectOfType;
 Handle SDKCall_CTFPlayer_TryToPickupBuilding;
 Handle SDKCall_CTFWeaponBaseGun_GetWeaponSpread;
 Handle SDKCall_CTFWeaponBaseGun_GetProjectileDamage;
@@ -201,6 +200,7 @@ Address CTakeDamageInfo_m_eCritType;
 Address CWeaponMedigun_m_bReloadDown; // *((_BYTE *)this + 2059)
 Address CObjectSentrygun_m_flShieldFadeTime; // *((float *)this + 712)
 Address CObjectBase_m_flHealth; // *((float *)a1 + 652)
+Address CTFPlayer_m_aObjects;
 const Address TFPlayerClassData_t_m_flMaxSpeed = view_as<Address>(640); // *((float *)this + 160)
 
 Address SpyClassData;
@@ -221,7 +221,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.4",
+    version = "1.4.1",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -775,8 +775,22 @@ void SetTF2ConVarValue(char[] name, any value)
 {
     for (int i = 0; i < sizeof(defaultConVars); ++i)
     {
-        if (StrEqual(defaultConVars[i].Name, name) && defaultConVars[i].Variable != INVALID_HANDLE)
+        if (StrEqual(defaultConVars[i].Name, name))
         {
+            if (defaultConVars[i].Variable == INVALID_HANDLE)
+            {
+                defaultConVars[i].Variable = FindConVar(defaultConVars[i].Name);
+                if (defaultConVars[i].Variable != INVALID_HANDLE)
+                {
+                    if (defaultConVars[i].Type == TF2ConVarType_Int)
+                        defaultConVars[i].DefaultValue = GetConVarInt(defaultConVars[i].Variable);
+                    else if (defaultConVars[i].Type == TF2ConVarType_Float)
+                        defaultConVars[i].DefaultValue = GetConVarFloat(defaultConVars[i].Variable);
+                }
+                else
+                    break;
+            }
+
             if (defaultConVars[i].Type == TF2ConVarType_Int)
                 SetConVarInt(defaultConVars[i].Variable, value);
             else if (defaultConVars[i].Type == TF2ConVarType_Float)
@@ -922,13 +936,11 @@ public void OnPluginStart()
     StartPrepSDKCall(SDKCall_Entity);
     PrepSDKCall_SetFromConf(config, SDKConf_Virtual, "CBaseObject::DetonateObject");
     SDKCall_CBaseObject_DetonateObject = EndPrepSDKCall();
+    StartPrepSDKCall(SDKCall_Entity);
+    PrepSDKCall_SetFromConf(config, SDKConf_Virtual, "CBaseObject::GetType");
+    PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
+    SDKCall_CBaseObject_GetType = EndPrepSDKCall();
 
-    StartPrepSDKCall(SDKCall_Player);
-    PrepSDKCall_SetFromConf(config, SDKConf_Signature, "CTFPlayer::GetObjectOfType");
-    PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
-    PrepSDKCall_AddParameter(SDKType_PlainOldData, SDKPass_Plain);
-    PrepSDKCall_SetReturnInfo(SDKType_CBaseEntity, SDKPass_Pointer);
-    SDKCall_CTFPlayer_GetObjectOfType = EndPrepSDKCall();
     StartPrepSDKCall(SDKCall_Player);
     PrepSDKCall_SetFromConf(config, SDKConf_Signature, "CTFPlayer::TryToPickupBuilding");
     PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_ByValue);
@@ -976,6 +988,7 @@ public void OnPluginStart()
     CWeaponMedigun_m_bReloadDown = view_as<Address>(FindSendPropInfo("CWeaponMedigun", "m_nChargeResistType") + 11);
     CObjectSentrygun_m_flShieldFadeTime = view_as<Address>(FindSendPropInfo("CObjectSentrygun", "m_nShieldLevel") + 4);
     CObjectBase_m_flHealth = view_as<Address>(FindSendPropInfo("CBaseObject", "m_bHasSapper") - 4);
+    CTFPlayer_m_aObjects = view_as<Address>(FindSendPropInfo("CTFPlayer", "m_iClassModelParity") + 72);
 
     delete config;
 
@@ -2112,8 +2125,55 @@ void StructuriseWeaponList(int client)
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// OBJECTS                                                                  //
+//////////////////////////////////////////////////////////////////////////////
+
+bool IsDisposableBuilding(int obj)
+{
+    return view_as<bool>(GetEntProp(obj, Prop_Send, "m_bDisposableBuilding"));
+}
+
+int GetObjectMode(int obj)
+{
+    return GetEntProp(obj, Prop_Send, "m_iObjectMode");
+}
+
+int GetObjectCount(int client)
+{
+    return Dereference(GetEntityAddress(client) + CTFPlayer_m_aObjects + view_as<Address>(12));
+}
+
+int GetObject(int client, int index)
+{
+    return LoadEntityHandleFromAddress(Dereference(GetEntityAddress(client) + CTFPlayer_m_aObjects) + index * 4);
+}
+
+int GetObjectOfType(int client, int iObjectType, int iObjectMode)
+{
+    int iNumObjects = GetObjectCount(client);
+    for (int i = 0; i < iNumObjects; ++i)
+    {
+        int pObj = GetObject(client, i);
+        if (pObj == -1)
+            continue;
+
+        if (SDKCall(SDKCall_CBaseObject_GetType, pObj) != iObjectType)
+            continue;
+
+        if (GetObjectMode(pObj) != iObjectMode)
+            continue;
+        
+        if (IsDisposableBuilding(pObj))
+            continue;
+
+        return pObj;
+    }
+    return -1;
+}
+
+//////////////////////////////////////////////////////////////////////////////
 // WEAPON FUNCTIONALITY                                                     //
-//////////////////////////////////////////////////////////////////////////////w
+//////////////////////////////////////////////////////////////////////////////
 
 int GetWeaponIndex(int weapon)
 {
@@ -2159,12 +2219,12 @@ float ApplyRadiusDamage(int victim, float damageposition[3], float radius, float
 
 void DestroyAllBuildings(int client)
 {
-    for (ObjectType_t i = OBJ_DISPENSER; i < OBJ_LAST; ++i)
+    for (any i = OBJ_DISPENSER; i < OBJ_LAST; ++i)
     {
-        int building = SDKCall(SDKCall_CTFPlayer_GetObjectOfType, client, i, 0);
+        int building = GetObjectOfType(client, i, 0); // SDKCall(SDKCall_CTFPlayer_GetObjectOfType, client, i, 0);
         if (i == OBJ_TELEPORTER) // Destroy the exit as well.
         {
-            int exitTeleporter = SDKCall(SDKCall_CTFPlayer_GetObjectOfType, client, i, 1);
+            int exitTeleporter = GetObjectOfType(client, i, 1); // SDKCall(SDKCall_CTFPlayer_GetObjectOfType, client, i, 1);
             if (IsValidEntity(exitTeleporter))
                 SDKCall(SDKCall_CBaseObject_DetonateObject, exitTeleporter);
         }
@@ -2343,7 +2403,7 @@ public Action ClientDeath(Event event, const char[] name, bool dontBroadcast)
         int index = GetWeaponIndex(weapon);
         if (index == 140 || index == 1086 || index == 30668) // Make the player's sentry shield disappear in only one second.
         {
-            int sentry = SDKCall(SDKCall_CTFPlayer_GetObjectOfType, client, OBJ_SENTRYGUN, 0);
+            int sentry = GetObjectOfType(client, view_as<int>(OBJ_SENTRYGUN), 0); // SDKCall(SDKCall_CTFPlayer_GetObjectOfType, client, OBJ_SENTRYGUN, 0);
             if (IsValidEntity(sentry))
             {
                 Address m_flShieldFadeTime = GetEntityAddress(sentry) + CObjectSentrygun_m_flShieldFadeTime;
@@ -4085,7 +4145,7 @@ MRESReturn ApplyDamageRules(Address thisPointer, DHookReturn returnValue, DHookP
     if (victim > 0 && victim <= MaxClients)
     {
         Address info = parameters.Get(1);
-        int bitsDamageType = Dereference(info + CTakeDamageInfo_m_bitsDamageType); // TODO: MAKE SURE THIS WORKS?
+        int bitsDamageType = Dereference(info + CTakeDamageInfo_m_bitsDamageType);
         for (int i = 1; i <= MaxClients; ++i)
         {
             if (allPlayers[victim].VaccinatorHealers[i] && bitsDamageType & resistanceMapping[GetResistType(DoesPlayerHaveItem(i, 998))])
