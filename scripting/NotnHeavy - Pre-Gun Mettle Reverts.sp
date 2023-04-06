@@ -3538,6 +3538,7 @@ MRESReturn GetMinigunDamage(int entity, DHookReturn returnValue)
 MRESReturn GetBazaarBargainChargeRate(int entity, DHookReturn returnValue)
 {
     // I am not entirely sure whether this is correct or not. Might consider installing SourceMod on one of my older builds of TF2.
+    // Change the recharge rate for the Bazaar Bargain.
     returnValue.Value = 0.2 * (intMin(GetEntProp(allEntities[entity].Owner, Prop_Send, "m_iDecapitations"), MAX_HEAD_BONUS) - 1) * TF_WEAPON_SNIPERRIFLE_CHARGE_PER_SEC;
     return MRES_Supercede;
 }
