@@ -2212,6 +2212,8 @@ float ApplyRadiusDamage(int victim, float damageposition[3], float radius, float
 
 void DestroyAllBuildings(int client)
 {
+    // TODO: REVISIT
+    /*
     for (any i = OBJ_DISPENSER; i < OBJ_LAST; ++i)
     {
         int building = GetObjectOfType(client, i, 0); // SDKCall(SDKCall_CTFPlayer_GetObjectOfType, client, i, 0);
@@ -2224,6 +2226,7 @@ void DestroyAllBuildings(int client)
         if (IsValidEntity(building))
             SDKCall(SDKCall_CBaseObject_DetonateObject, building);
     }
+    */
 }
 
 float GetBuildingConstructionMultiplier_NoHook(int entity)
@@ -2524,7 +2527,10 @@ public void OnEntityCreated(int entity, const char[] class)
         for (int i = 0; i <= MAXPLAYERS; ++i)
             allEntities[entity].ConstructionBoostExpiryTimes[i] = -1.0;
         SDKHook(entity, SDKHook_OnTakeDamage, BuildingDamaged);
-        DHookEntity(DHooks_CBaseObject_Command_Repair, false, entity, _, CommandRepair);
+
+        // TODO: REVISIT
+        //DHookEntity(DHooks_CBaseObject_Command_Repair, false, entity, _, CommandRepair);
+        
         if (StrEqual(class, "obj_sentrygun"))
         {
             DHookEntity(DHooks_CObjectSentrygun_OnWrenchHit, false, entity, _, PreSentryWrenchHit);
