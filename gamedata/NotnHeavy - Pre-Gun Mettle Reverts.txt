@@ -430,12 +430,12 @@
 			}
 			"CBaseObject::StartBuilding"
 			{
-				"windows" "342"
+				"windows" "341"
 				"linux"   "343"
 			}
 			"CBaseObject::Construct"
 			{
-				"windows" "350"
+				"windows" "349"
 				"linux"   "351"
 			}
 			"CBaseObject::GetType"
