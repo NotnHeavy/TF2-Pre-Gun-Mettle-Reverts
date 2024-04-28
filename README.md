@@ -35,3 +35,9 @@ This plugin has been influenced not only by my somehow massive interest in TF2's
 - Thank you to nosoop for providing samples of code (functions used for memory management in this case) with your stocksoup plugin (https://github.com/nosoop/stocksoup)!
 
 Project on AlliedModders: https://forums.alliedmods.net/showthread.php?p=2775250
+
+## Note - 2024.04.28
+
+So, this plugin is honestly pretty old. It was my first ever attempt at writing a SourceMod plugin. While it's still fun, it has some bugs that I don't really want to tinker with as the code base is pretty ugly to my likings, alongside me just doing other things at the moment of writing this.
+
+In the future, I might start fresh, with a future plugin encompassing other balance updates. For now, I'll still update gamedata here and maybe revisit some things occasionally.
