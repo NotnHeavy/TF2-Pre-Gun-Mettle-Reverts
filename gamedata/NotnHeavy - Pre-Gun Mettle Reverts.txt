@@ -115,13 +115,13 @@
 				"windows" "\x56\x6A\x05\x8B\xF1\xE8\x2A\x2A\x2A\x2A\x84\xC0\x74\x2A\x6A\x00"
 				"linux"   "@_ZN9CTFPlayer18MedicGetHealTargetEv"
 			}
-			"CTFPlayer::ApplyPunchImpulseX"
+			"CTFPlayer::ApplyPunchImpulseX" // offset aAimingNoFlinch ; "aiming_no_flinch"
 			{
 				"library" "server"
 				"windows" "\x55\x8B\xEC\x53\x56\x8B\xF1\xB3\x01"
 				"linux"   "@_ZN9CTFPlayer18ApplyPunchImpulseXEf"
 			}
-			"CTFPlayer::AddToSpyKnife"
+			"CTFPlayer::AddToSpyKnife" // offset aAmmoGivesCharg ; "ammo_gives_charge", either subroutine is fine, call above
 			{
 				"library" "server"
 				"windows" "\x55\x8B\xEC\x6A\x07"
@@ -140,7 +140,7 @@
 				"windows" "\x55\x8B\xEC\x83\xEC\x08\x56\x8B\xF1\x8B\x8E\x8C\x01\x00\x00\x85\xC9"
 				"linux"   "@_ZN15CTFPlayerShared7AddCondE7ETFCondfP11CBaseEntity"
 			}
-			"CTFPlayerShared::RemoveCond"
+			"CTFPlayerShared::RemoveCond" // offset aDamagePrevente ; "damage_prevented"
 			{
 				"library" "server"
 				"windows" "\x55\x8B\xEC\x83\xEC\x08\x53\x8B\x5D\x08\x56\x53"
@@ -153,7 +153,7 @@
 				"windows" "\x55\x8B\xEC\xF3\x0F\x10\x45\x08\x83\xEC\x08"
 				"linux"	  "@_ZN15CTFPlayerShared12SetRageMeterEf"
 			}
-			"CTFPlayerShared::CalcChargeCrit" // offset aRemovemeleecri ; "RemoveMeleeCrit", function should have 0.30000001
+			"CTFPlayerShared::CalcChargeCrit" // offset aLoseDemoCharge ; "lose_demo_charge_on_damage_when_chargin"..., function is NOT ontakedamage, doesn't have incond call either
 			{
 				"library" "server"
 				"windows" "\x55\x8B\xEC\x83\xEC\x0C\x53\x56\x57\x8B\xF1\x6A\x01"
@@ -168,7 +168,7 @@
 			"CTFPlayerShared::CanRecieveMedigunChargeEffect"
 			{
 				"library" "server"
-				"windows" "\x55\x8B\xEC\x53\x56\x57\x8B\xF9\xB3\x01" // some functions are a literal nuisance to find i swear
+				"windows" "\x55\x8B\xEC\x83\xEC\x38\x53\x56\x57\x8B\xF9\xC7\x45\xCC\x00\x00\x00\x00" // some functions are a literal nuisance to find i swear
 				"linux"   "@_ZNK15CTFPlayerShared29CanRecieveMedigunChargeEffectE20medigun_charge_types"
 			}
 			"CTFPlayerShared::Disguise" // offset aModDisguiseCon ; "mod_disguise_consumes_cloak"
@@ -240,7 +240,7 @@
 				"linux"    "@_ZN10CTFMinigun12SharedAttackEv"
 			}
 
-			"CTFLunchBox::ApplyBiteEffects"
+			"CTFLunchBox::ApplyBiteEffects" // offset aLunchboxHealin ; "lunchbox_healing_scale"
 			{
 				"library" "server"
 				"windows" "\x55\x8B\xEC\x51\x53\x8B\xD9\x56\x57\x6A\x01"
