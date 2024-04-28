@@ -440,7 +440,7 @@
 			}
 			"CBaseObject::GetType"
 			{
-				"windows" "358"
+				"windows" "357"
 				"linux"   "359"
 			}
 			
