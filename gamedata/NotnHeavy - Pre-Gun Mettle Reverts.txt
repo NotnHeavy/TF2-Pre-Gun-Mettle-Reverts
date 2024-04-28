@@ -315,8 +315,8 @@
 
 			"MemoryPatch_DisableDebuffShortenWhilstCloaked"
 			{
-				"windows" "767"
-				"linux"   "295"
+				"windows" "899"
+				"linux"   "187"
 			}
 
 			"GetRadius"
@@ -1006,13 +1006,6 @@
 						"type" "bool"
 					}
 				}
-			}
-			"CTFPlayerShared::UpdateCloakMeter"
-			{
-				"signature" "CTFPlayerShared::UpdateCloakMeter"
-				"callconv"  "thiscall"
-				"this"      "address"
-				"return"    "void"
 			}
 			"CTFWeaponBaseMelee::OnSwingHit"
 			{

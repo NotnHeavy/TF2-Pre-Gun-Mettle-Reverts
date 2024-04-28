@@ -139,7 +139,6 @@ DHookSetup DHooks_CTFPlayerShared_AddToSpyCloakMeter;
 //DHookSetup DHooks_CTFPlayerShared_Heal;
 DHookSetup DHooks_CTFPlayerShared_CanRecieveMedigunChargeEffect;
 DHookSetup DHooks_CTFPlayerShared_Disguise;
-DHookSetup DHooks_CTFPlayerShared_UpdateCloakMeter;
 DHookSetup DHooks_CTFWeaponBaseMelee_OnSwingHit;
 DHookSetup DHooks_CTFMinigun_SharedAttack;
 DHookSetup CTFWearable_CTFWearable_Break;
@@ -613,9 +612,6 @@ enum struct Player
     // Bazaar Bargain.
     BazaarBargainShotManager BazaarBargainShot;
 
-    // Cloaking.
-    bool UpdatingCloakMeter;
-
     // Dead Ringer.
     bool FeigningDeath;
     int TicksSinceFeignReady;
@@ -863,7 +859,6 @@ public void OnPluginStart()
     //DHooks_CTFPlayerShared_Heal = DHookCreateFromConf(config, "CTFPlayerShared::Heal");
     DHooks_CTFPlayerShared_CanRecieveMedigunChargeEffect = DHookCreateFromConf(config, "CTFPlayerShared::CanRecieveMedigunChargeEffect");
     DHooks_CTFPlayerShared_Disguise = DHookCreateFromConf(config, "CTFPlayerShared::Disguise");
-    DHooks_CTFPlayerShared_UpdateCloakMeter = DHookCreateFromConf(config, "CTFPlayerShared::UpdateCloakMeter");
     DHooks_CTFWeaponBaseMelee_OnSwingHit = DHookCreateFromConf(config, "CTFWeaponBaseMelee::OnSwingHit");
     DHooks_CTFMinigun_SharedAttack = DHookCreateFromConf(config, "CTFMinigun::SharedAttack");
     CTFWearable_CTFWearable_Break = DHookCreateFromConf(config, "CTFWearable::Break");
@@ -897,8 +892,6 @@ public void OnPluginStart()
     //DHookEnableDetour(DHooks_CTFPlayerShared_Heal, false, HealPlayer);
     DHookEnableDetour(DHooks_CTFPlayerShared_CanRecieveMedigunChargeEffect, false, CheckIfPlayerCanBeUbered);
     DHookEnableDetour(DHooks_CTFPlayerShared_Disguise, true, DisguisePlayer);
-    DHookEnableDetour(DHooks_CTFPlayerShared_UpdateCloakMeter, false, PreUpdateCloakMeter);
-    DHookEnableDetour(DHooks_CTFPlayerShared_UpdateCloakMeter, true, PostUpdateCloakMeter);
     DHookEnableDetour(DHooks_CTFWeaponBaseMelee_OnSwingHit, false, OnMeleeSwingHit);
     DHookEnableDetour(DHooks_CTFMinigun_SharedAttack, false, OnMinigunSharedAttack);
     DHookEnableDetour(CTFWearable_CTFWearable_Break, true, BreakRazorback);
@@ -3926,20 +3919,6 @@ MRESReturn DisguisePlayer(Address thisPointer, DHookParam parameters)
     int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
     SetEntProp(client, Prop_Send, "m_nDesiredDisguiseTeam", TF2_GetClientTeam(client) == TFTeam_Red ? TFTeam_Blue : TFTeam_Red); // Only get the player to disguise as the enemy team. Can't change it client-side :c
     WriteToValue(thisPointer + CTFPlayerShared_m_flDisguiseCompleteTime, GetGameTime() + 2.0); // Disguise time must always be 2 seconds.
-    return MRES_Ignored;
-}
-
-MRESReturn PreUpdateCloakMeter(Address thisPointer)
-{
-    int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
-    allPlayers[client].UpdatingCloakMeter = true;
-    return MRES_Ignored;
-}
-
-MRESReturn PostUpdateCloakMeter(Address thisPointer)
-{
-    int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
-    allPlayers[client].UpdatingCloakMeter = false;
     return MRES_Ignored;
 }
 
