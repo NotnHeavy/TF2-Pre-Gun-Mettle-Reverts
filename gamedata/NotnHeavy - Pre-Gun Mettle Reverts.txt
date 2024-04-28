@@ -266,10 +266,10 @@
 				"windows" "\x55\x8B\xEC\x83\xEC\x48\x8B\x45\x08\x53"
 				"linux"   "@_ZN11CBaseObject17OnConstructionHitEP9CTFPlayerP9CTFWrench6Vector"
 			}
-			"CBaseObject::GetConstructionMultiplier" // offset aSapperDegenera ; "sapper_degenerates_buildings", smaller subroutine
+			"CBaseObject::GetConstructionMultiplier" // offset aTeleporterBuil ; "teleporter_build_rate_multiplier", xref to this
 			{
 				"library" "server"
-				"windows" "\x55\x8B\xEC\x83\xEC\x74\x57\x8B\xF9\xE8\x2A\x2A\x2A\x2A\x85\xC0"
+				"windows" "\x55\x8B\xEC\x83\xEC\x0C\x56\x8B\xF1\x89\x75\xF4\xE8\x2A\x2A\x2A\x2A\x85\xC0"
 				"linux"   "@_ZN11CBaseObject25GetConstructionMultiplierEv"
 			}
 			"CBaseObject::GetReversesBuildingConstructionSpeed" // offset aBuildingSentry_13 ; "Building_Sentrygun.Disabled", first function call in subroutine
