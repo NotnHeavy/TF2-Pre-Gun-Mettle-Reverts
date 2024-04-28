@@ -133,10 +133,10 @@ DHookSetup DHooks_CTFPlayer_AddToSpyKnife;
 DHookSetup DHooks_CTFPlayer_OnTakeDamage_Alive;
 DHookSetup DHooks_CTFPlayerShared_AddCond;
 DHookSetup DHooks_CTFPlayerShared_RemoveCond;
-DHookSetup DHooks_CTFPlayerShared_ModifyRage;
+DHookSetup DHooks_CTFPlayerShared_SetRageMeter;
 DHookSetup DHooks_CTFPlayerShared_CalcChargeCrit;
 DHookSetup DHooks_CTFPlayerShared_AddToSpyCloakMeter;
-DHookSetup DHooks_CTFPlayerShared_Heal;
+//DHookSetup DHooks_CTFPlayerShared_Heal;
 DHookSetup DHooks_CTFPlayerShared_CanRecieveMedigunChargeEffect;
 DHookSetup DHooks_CTFPlayerShared_Disguise;
 DHookSetup DHooks_CTFPlayerShared_UpdateCloakMeter;
@@ -221,7 +221,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.4.1",
+    version = "1.4.2",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -857,10 +857,10 @@ public void OnPluginStart()
     DHooks_CTFPlayer_OnTakeDamage_Alive = DHookCreateFromConf(config, "CTFPlayer::OnTakeDamage_Alive");
     DHooks_CTFPlayerShared_AddCond = DHookCreateFromConf(config, "CTFPlayerShared::AddCond");
     DHooks_CTFPlayerShared_RemoveCond = DHookCreateFromConf(config, "CTFPlayerShared::RemoveCond");
-    DHooks_CTFPlayerShared_ModifyRage = DHookCreateFromConf(config, "CTFPlayerShared::ModifyRage");
+    DHooks_CTFPlayerShared_SetRageMeter = DHookCreateFromConf(config, "CTFPlayerShared::SetRageMeter");
     DHooks_CTFPlayerShared_CalcChargeCrit = DHookCreateFromConf(config, "CTFPlayerShared::CalcChargeCrit");
     DHooks_CTFPlayerShared_AddToSpyCloakMeter = DHookCreateFromConf(config, "CTFPlayerShared::AddToSpyCloakMeter");
-    DHooks_CTFPlayerShared_Heal = DHookCreateFromConf(config, "CTFPlayerShared::Heal");
+    //DHooks_CTFPlayerShared_Heal = DHookCreateFromConf(config, "CTFPlayerShared::Heal");
     DHooks_CTFPlayerShared_CanRecieveMedigunChargeEffect = DHookCreateFromConf(config, "CTFPlayerShared::CanRecieveMedigunChargeEffect");
     DHooks_CTFPlayerShared_Disguise = DHookCreateFromConf(config, "CTFPlayerShared::Disguise");
     DHooks_CTFPlayerShared_UpdateCloakMeter = DHookCreateFromConf(config, "CTFPlayerShared::UpdateCloakMeter");
@@ -891,10 +891,10 @@ public void OnPluginStart()
     DHookEnableDetour(DHooks_CTFPlayer_OnTakeDamage_Alive, false, OnTakeDamageAlive);
     DHookEnableDetour(DHooks_CTFPlayerShared_AddCond, false, AddCondition);
     DHookEnableDetour(DHooks_CTFPlayerShared_RemoveCond, false, RemoveCondition);
-    DHookEnableDetour(DHooks_CTFPlayerShared_ModifyRage, false, ModifyRageMeter);
+    DHookEnableDetour(DHooks_CTFPlayerShared_SetRageMeter, false, ModifyRageMeter);
     DHookEnableDetour(DHooks_CTFPlayerShared_CalcChargeCrit, false, CalculateChargeCrit);
     DHookEnableDetour(DHooks_CTFPlayerShared_AddToSpyCloakMeter, false, AddToCloak);
-    DHookEnableDetour(DHooks_CTFPlayerShared_Heal, false, HealPlayer);
+    //DHookEnableDetour(DHooks_CTFPlayerShared_Heal, false, HealPlayer);
     DHookEnableDetour(DHooks_CTFPlayerShared_CanRecieveMedigunChargeEffect, false, CheckIfPlayerCanBeUbered);
     DHookEnableDetour(DHooks_CTFPlayerShared_Disguise, true, DisguisePlayer);
     DHookEnableDetour(DHooks_CTFPlayerShared_UpdateCloakMeter, false, PreUpdateCloakMeter);
@@ -3899,6 +3899,8 @@ MRESReturn AddToCloak(Address thisPointer, DHookReturn returnValue, DHookParam p
     return MRES_Ignored;
 }
 
+// TODO - REVISIT PLEASE!
+/*
 MRESReturn HealPlayer(Address thisPointer, DHookParam parameters)
 {
     int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
@@ -3910,6 +3912,7 @@ MRESReturn HealPlayer(Address thisPointer, DHookParam parameters)
     }
     return MRES_Ignored;
 }
+*/
 
 MRESReturn CheckIfPlayerCanBeUbered(Address thisPointer, DHookReturn returnValue, DHookParam parameters)
 {
@@ -3943,9 +3946,12 @@ MRESReturn PostUpdateCloakMeter(Address thisPointer)
 MRESReturn ModifyRageMeter(Address thisPointer, DHookParam parameters)
 {
     int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
-    if (TF2_GetPlayerClass(client) == TFClass_Pyro)
+    if (TF2_GetPlayerClass(client) == TFClass_Pyro && DoesPlayerHaveItem(client, 594))
     {
-        parameters.Set(1, view_as<float>(parameters.Get(1)) * (300.00 / 225.00)); // Take only 225 damage to build up the Phlog rage meter. This is hacky but it's simple, at least.
+        float meter = GetEntPropFloat(client, Prop_Send, "m_flRageMeter");
+        float delta = view_as<float>(parameters.Get(1)) - meter;
+        delta *= (300.00 / 225.00); // Take only 225 damage to build up the Phlog rage meter. This is hacky but it's simple, at least.
+        parameters.Set(1, delta + meter);
         return MRES_ChangedHandled;
     }
     return MRES_Ignored;
