@@ -420,12 +420,12 @@
 
 			"CBaseObject::DetonateObject"
 			{
-				"windows" "352"
+				"windows" "351"
 				"linux"   "353"
 			}
 			"CBaseObject::Command_Repair"
 			{
-				"windows" "367"
+				"windows" "366"
 				"linux"   "368"
 			}
 			"CBaseObject::StartBuilding"
