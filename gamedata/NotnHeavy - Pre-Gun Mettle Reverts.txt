@@ -309,8 +309,8 @@
 
 			"MemoryPatch_NormalScorchShotKnockback"
 			{
-				"windows" "763"
-				"linux"   "5244"
+				"windows" "771"
+				"linux"   "3372"
 			}
 
 			"MemoryPatch_DisableDebuffShortenWhilstCloaked"
