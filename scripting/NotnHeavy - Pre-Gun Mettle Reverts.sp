@@ -3933,10 +3933,9 @@ MRESReturn ModifyRageMeter(Address thisPointer, DHookParam parameters)
     int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
     if (TF2_GetPlayerClass(client) == TFClass_Pyro && DoesPlayerHaveItem(client, 594))
     {
-        float meter = GetEntPropFloat(client, Prop_Send, "m_flRageMeter");
-        float delta = view_as<float>(parameters.Get(1)) - meter;
+        float delta = view_as<float>(parameters.Get(1));
         delta *= (300.00 / 225.00); // Take only 225 damage to build up the Phlog rage meter. This is hacky but it's simple, at least.
-        parameters.Set(1, delta + meter);
+        parameters.Set(1, delta);
         return MRES_ChangedHandled;
     }
     return MRES_Ignored;
