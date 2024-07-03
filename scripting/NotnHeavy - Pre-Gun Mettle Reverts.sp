@@ -695,11 +695,6 @@ int chargeOnChargeKillWeapons[][] =
     { 1099, 75 }, // Tide Turner.
     { 327, 25 } // Claidheamh Mòr.
 };
-ModelInformation customWeapons[] =
-{
-    { "models\\weapons\\c_models\\c_rocketjumper\\c_oldrocketjumper", "materials\\models\\weapons\\c_items\\c_rocketjumper", false, 237 }, // Rocket Jumper.
-    { "models\\weapons\\c_models\\c_old_sticky_jumper", "materials\\models\\weapons\\c_items\\c_sticky_jumper", true, 265 } // Sticky Jumper.
-};
 BlockedItem blockedWeapons[] =
 {
     { "Dragon's Fury", 1178 },
