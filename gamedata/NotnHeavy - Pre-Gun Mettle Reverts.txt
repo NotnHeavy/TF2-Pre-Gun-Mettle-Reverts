@@ -303,8 +303,8 @@
 		{
 			"MemoryPatch_ShieldTurnCap"
 			{
-				"windows" "139"
-				"linux"   "140"
+				"windows" "150"
+				"linux"   "240"
 			}
 
 			"MemoryPatch_NormalScorchShotKnockback"

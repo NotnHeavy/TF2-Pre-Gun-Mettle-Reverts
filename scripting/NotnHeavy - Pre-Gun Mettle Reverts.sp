@@ -1,5 +1,11 @@
-// i think all i'll do from now on here is just maintain this code and see if i can optimise things.
-// otherwise i'll be working on meet the team fortress
+// 2024.10.11:
+// this code is.. a mess, to say the least.
+// the syntax is horrible because this was my first ever sm plugin, there's a
+// lot of ugly stuff going on and honestly i'm only just maintaining gamedata
+// for this plugin.
+//
+// in the future, i *may* work on a successor plugin - it just depends on
+// my motivation and my current project ideas
 
 //////////////////////////////////////////////////////////////////////////////
 // MADE BY NOTNHEAVY. USES GPL-3, AS PER REQUEST OF SOURCEMOD               //
@@ -186,7 +192,7 @@ float MemoryPatch_NormalScorchShotKnockback_NewValue = 100.00;
 
 Address MemoryPatch_DisableDebuffShortenWhilstCloaked;
 Address MemoryPatch_DisableDebuffShortenWhilstCloaked_oldValue;
-float MemoryPatch_DisableDebuffShortenWhilstCloaked_NewValue = 1.00;
+float MemoryPatch_DisableDebuffShortenWhilstCloaked_NewValue = 0.00;
 
 Address CTFPlayerShared_m_pOuter;
 Address CTFPlayerShared_m_flDisguiseCompleteTime;
@@ -220,7 +226,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.4.2",
+    version = "1.4.3",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -957,9 +963,14 @@ public void OnPluginStart()
     SDKCall_CBaseObject_GetReversesBuildingConstructionSpeed = EndPrepSDKCall();
 
     // Memory patches.
+    /*
+    // This code is not accurate in retrospect to Smissmas 2014. You can uncomment this if you wish, but
+    // I cannot guarantee that the gamedata is accurate.
+
     MemoryPatch_ShieldTurnCap = GameConfGetAddress(config, "MemoryPatch_ShieldTurnCap") + view_as<Address>(GameConfGetOffset(config, "MemoryPatch_ShieldTurnCap"));
     MemoryPatch_ShieldTurnCap_OldValue = LoadFromAddress(MemoryPatch_ShieldTurnCap, NumberType_Int32);
     StoreToAddress(MemoryPatch_ShieldTurnCap, AddressOf(MemoryPatch_ShieldTurnCap_NewValue), NumberType_Int32);
+    */
 
     MemoryPatch_NormalScorchShotKnockback = GameConfGetAddress(config, "MemoryPatch_NormalScorchShotKnockback") + view_as<Address>(GameConfGetOffset(config, "MemoryPatch_NormalScorchShotKnockback"));
     MemoryPatch_NormalScorchShotKnockback_oldValue = LoadFromAddress(MemoryPatch_NormalScorchShotKnockback, NumberType_Int32);
@@ -1082,7 +1093,9 @@ public void OnPluginEnd()
     }
 
     // Memory patches.
+    /*
     StoreToAddress(MemoryPatch_ShieldTurnCap, MemoryPatch_ShieldTurnCap_OldValue, NumberType_Int32);
+    */
     StoreToAddress(MemoryPatch_NormalScorchShotKnockback, MemoryPatch_NormalScorchShotKnockback_oldValue, NumberType_Int32);
     StoreToAddress(MemoryPatch_DisableDebuffShortenWhilstCloaked, MemoryPatch_DisableDebuffShortenWhilstCloaked_oldValue, NumberType_Int32);
 }
@@ -1103,7 +1116,7 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
  
     // Create a new item and change global attributes.
     newItem = TF2Items_CreateItem(OVERRIDE_ATTRIBUTES | PRESERVE_ATTRIBUTES);
-    TF2Items_SetAttribute(newItem, 0, 773, 1.34); // This weapon deploys 1.34% slower. 0.5s * 1.34 = 0.67s, nearly the same as pre-Tough Break switch speed.
+    TF2Items_SetAttribute(newItem, 0, 773, 1.34); // This weapon deploys 1.34% slower. 0.5s * 1.34 = 0.67s, the same as pre-Tough Break switch speed.
     TF2Items_SetNumAttributes(newItem, 1);
     OriginalTF2ItemsIndex = -1;
 
@@ -2027,6 +2040,10 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
             }
         }
     }
+
+    // Skip if there are no changed attributes.
+    if (TF2Items_GetNumAttributes(newItem) == 1)
+        return Plugin_Continue;
 
     item = newItem;
     return Plugin_Changed;
@@ -3612,6 +3629,7 @@ MRESReturn CommandRepair(int entity, DHookReturn returnValue, DHookParam paramet
 
 MRESReturn StartBuilding(int entity, DHookReturn returnValue, DHookParam parameters)
 {
+    PrintToChatAll("JFAJDASJASD");
     if (GetEntProp(entity, Prop_Send, "m_bMiniBuilding")) // Mini sentries always start off at max health.
         WriteToValue(GetEntityAddress(entity) + CObjectBase_m_flHealth, 100.00);
     return MRES_Ignored;
