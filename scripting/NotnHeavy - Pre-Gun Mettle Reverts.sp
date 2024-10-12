@@ -226,7 +226,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.4.3",
+    version = "1.4.4",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -3629,7 +3629,6 @@ MRESReturn CommandRepair(int entity, DHookReturn returnValue, DHookParam paramet
 
 MRESReturn StartBuilding(int entity, DHookReturn returnValue, DHookParam parameters)
 {
-    PrintToChatAll("JFAJDASJASD");
     if (GetEntProp(entity, Prop_Send, "m_bMiniBuilding")) // Mini sentries always start off at max health.
         WriteToValue(GetEntityAddress(entity) + CObjectBase_m_flHealth, 100.00);
     return MRES_Ignored;

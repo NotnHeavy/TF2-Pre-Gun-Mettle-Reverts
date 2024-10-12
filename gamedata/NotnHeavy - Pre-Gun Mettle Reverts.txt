@@ -181,7 +181,7 @@
 			{
 				"library" "server"
 				"windows" "\x55\x8B\xEC\x83\xEC\x24\x56\x8B\xF1\x6A\x08" // i had to go through like 5 functions for this. turns out each function was the first call in each other LOL (aHypeDecaysOver db 'hype_decays_over_time')
-				"linux"   "@_ZN15CTFPlayerShared16UpdateCloakMeterEv"
+				"linux"   "@_ZN15CTFPlayerShared16UpdateCloakMeterEv.part.0"
 			}
 
 			"CTFWeaponBaseMelee::OnSwingHit" // offset aTaggedPlayerAs ; "tagged_player_as_it"
