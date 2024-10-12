@@ -226,7 +226,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.4.3",
+    version = "1.4.4",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
