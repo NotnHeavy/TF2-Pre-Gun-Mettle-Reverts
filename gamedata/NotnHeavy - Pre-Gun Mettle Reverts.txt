@@ -37,6 +37,17 @@
 					"signature" "CTFPlayerShared::UpdateCloakMeter"
 				}
 			}
+			"MemoryPatch_FixYourEternalReward"
+			{
+				"windows"
+				{
+					"signature" "CTFPlayer::DisguiseOnKill()"
+				}
+				"linux"
+				{
+					"signature" "CTFPlayer::DisguiseOnKill()"
+				}
+			}
 		}
 		"Signatures"
 		{
@@ -132,6 +143,12 @@
 				"library" "server"
 				"windows" "\x55\x8B\xEC\x81\xEC\x80\x01\x00\x00\x56" // offset aBleedingDurati ; "bleeding_duration"
 				"linux"   "@_ZN9CTFPlayer18OnTakeDamage_AliveERK15CTakeDamageInfo"
+			}
+			"CTFPlayer::DisguiseOnKill()"
+			{
+				"library" "server"
+				"windows" "\x55\x8B\xEC\x51\x56\x8B\xF1\x8B\x96\x28\x08\x00\x00" // offset aDisguiseonkill ; "DisguiseOnKill", scroll down a bit and find "push offset sub_xxxxxxxx".
+				"linux"   "@_ZN8CTFKnife14DisguiseOnKillEv"
 			}
 
 			"CTFPlayerShared::AddCond" // offset aJarateBackstab ; "jarate_backstabber", go to call that looks like AddCond (last time checked, 2nd from offset)
@@ -317,6 +334,17 @@
 			{
 				"windows" "899"
 				"linux"   "187"
+			}
+
+			"MemoryPatch_FixYourEternalReward"
+			{
+				"windows" "111" // find CTFPlayer::CanDisguise() with offset aSetCannotDisgu ; "set_cannot_disguise" (SMALLER FUNCTION), set name of it, patch out jz
+				"linux"   "133"
+			}
+			"MemoryPatch_FixYourEternalReward_NOPCount"
+			{
+				"windows" "2"
+				"linux"   "6"
 			}
 
 			"GetRadius"

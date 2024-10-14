@@ -194,6 +194,11 @@ Address MemoryPatch_DisableDebuffShortenWhilstCloaked;
 Address MemoryPatch_DisableDebuffShortenWhilstCloaked_oldValue;
 float MemoryPatch_DisableDebuffShortenWhilstCloaked_NewValue = 0.00;
 
+Address MemoryPatch_FixYourEternalReward;
+char MemoryPatch_FixYourEternalReward_OldValue[6];
+char MemoryPatch_FixYourEternalReward_NewValue[] = "\x90\x90\x90\x90\x90\x90";
+int MemoryPatch_FixYourEternalReward_NOPCount;
+
 Address CTFPlayerShared_m_pOuter;
 Address CTFPlayerShared_m_flDisguiseCompleteTime;
 Address CGameTrace_m_pEnt;
@@ -226,7 +231,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.4.4",
+    version = "1.4.5",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -563,7 +568,7 @@ enum struct Player
     int TicksSinceBonkEnd;
 
     // Crit-a-Cola.
-    int TicksSincePrimaryAttack;
+    int TicksSinceAttack;
 
     // Flying Guillotine.
     float CleaverChargeMeter;
@@ -980,6 +985,15 @@ public void OnPluginStart()
     MemoryPatch_DisableDebuffShortenWhilstCloaked_oldValue = LoadFromAddress(MemoryPatch_DisableDebuffShortenWhilstCloaked, NumberType_Int32);
     StoreToAddress(MemoryPatch_DisableDebuffShortenWhilstCloaked, AddressOf(MemoryPatch_DisableDebuffShortenWhilstCloaked_NewValue), NumberType_Int32);
 
+    MemoryPatch_FixYourEternalReward = GameConfGetAddress(config, "MemoryPatch_FixYourEternalReward") + view_as<Address>(GameConfGetOffset(config, "MemoryPatch_FixYourEternalReward"));
+    MemoryPatch_FixYourEternalReward_NOPCount = GameConfGetOffset(config, "MemoryPatch_FixYourEternalReward_NOPCount");
+    for (int i = 0; i < MemoryPatch_FixYourEternalReward_NOPCount; ++i)
+    {
+        Address index = view_as<Address>(i);
+        MemoryPatch_FixYourEternalReward_OldValue[i] = LoadFromAddress(MemoryPatch_FixYourEternalReward + view_as<Address>(index), NumberType_Int8);
+        StoreToAddress(MemoryPatch_FixYourEternalReward + index, MemoryPatch_FixYourEternalReward_NewValue[i], NumberType_Int8);
+    }
+
     // Offsets.
     CTFPlayerShared_m_pOuter = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_pOuter"));
     CTFPlayerShared_m_flDisguiseCompleteTime = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_flDisguiseCompleteTime"));
@@ -1098,6 +1112,11 @@ public void OnPluginEnd()
     */
     StoreToAddress(MemoryPatch_NormalScorchShotKnockback, MemoryPatch_NormalScorchShotKnockback_oldValue, NumberType_Int32);
     StoreToAddress(MemoryPatch_DisableDebuffShortenWhilstCloaked, MemoryPatch_DisableDebuffShortenWhilstCloaked_oldValue, NumberType_Int32);
+    for (int i = 0; i < MemoryPatch_FixYourEternalReward_NOPCount; ++i)
+    {
+        Address index = view_as<Address>(i);
+        StoreToAddress(MemoryPatch_FixYourEternalReward + index, MemoryPatch_FixYourEternalReward_OldValue[i], NumberType_Int8);
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2984,7 +3003,7 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
     {
         if (index == 415 && GetEntityFlags(victim) & (FL_ONGROUND | FL_INWATER) == 0 && allPlayers[attacker].FramesSinceLastSwitch < TICK_RATE * 5) // Reserve Shooter mini-crit. This only works if it hasn't been 5 seconds since equipping the Reserve Shooter.
             TF2_AddCondition(victim, TFCond_MarkedForDeathSilent, TICK_RATE_PRECISION, inflictor);
-        if ((index == 228 || index == 1085) && attacker != victim) // Black Box hit.
+        if ((index == 228 || index == 1085) && attacker != victim && TF2_GetClientTeam(attacker) != TF2_GetClientTeam(victim)) // Black Box hit.
         {
             // Show that attacker got healed.
             Handle event = CreateEvent("player_healonhit", true);
@@ -3506,7 +3525,7 @@ MRESReturn WeaponPrimaryFire(int entity)
     }
     else if (index == 402 && TF2_IsPlayerInCondition(owner, TFCond_Slowed)) // Bazaar Bargain head counter: lose a head.
         allPlayers[owner].BazaarBargainShot = BazaarBargain_Lose;
-    allPlayers[owner].TicksSincePrimaryAttack = GetGameTickCount();
+    allPlayers[owner].TicksSinceAttack = GetGameTickCount();
     return MRES_Ignored;
 }
 
@@ -3528,6 +3547,7 @@ MRESReturn WeaponSecondaryFire(int entity)
         allPlayers[owner].VaccinatorCharge = float(RoundToFloor(GetEntPropFloat(entity, Prop_Send, "m_flChargeLevel") * 4)) / 4;
         allPlayers[owner].EndVaccinatorChargeFalloff = allPlayers[owner].VaccinatorCharge - 0.25;
     }
+    allPlayers[owner].TicksSinceAttack = GetGameTickCount();
     return MRES_Ignored;
 }
 
@@ -3825,7 +3845,7 @@ MRESReturn AddCondition(Address thisPointer, DHookParam parameters)
 {
     int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
     TFCond condition = parameters.Get(1);
-    if (condition == TFCond_MarkedForDeathSilent && TF2_IsPlayerInCondition(client, TFCond_CritCola) && allPlayers[client].TicksSincePrimaryAttack == GetGameTickCount()) // Do not mark the player for death when using Crit-a-Cola.
+    if (condition == TFCond_MarkedForDeathSilent && TF2_IsPlayerInCondition(client, TFCond_CritCola) && allPlayers[client].TicksSinceAttack == GetGameTickCount()) // Do not mark the player for death when using Crit-a-Cola.
         return MRES_Supercede;
     else if ((condition == TFCond_UberchargedCanteen || condition == TFCond_MegaHeal) && allPlayers[client].TicksSinceMmmphUsage == GetGameTickCount()) // Phlog invulnerability/knockback prevention.
         return MRES_Supercede;
@@ -3939,9 +3959,15 @@ MRESReturn CheckIfPlayerCanBeUbered(Address thisPointer, DHookReturn returnValue
 
 MRESReturn DisguisePlayer(Address thisPointer, DHookParam parameters)
 {
+    // Check if the client is holding the Your Eternal Reward. If so, 
+    // use the existing disguise time.
     int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
+    if (DoesPlayerHaveItems(client, { 225, 574 }, 2))
+        return MRES_Ignored;
+
+    // Set the disguise time to 2 seconds.
     SetEntProp(client, Prop_Send, "m_nDesiredDisguiseTeam", TF2_GetClientTeam(client) == TFTeam_Red ? TFTeam_Blue : TFTeam_Red); // Only get the player to disguise as the enemy team. Can't change it client-side :c
-    WriteToValue(thisPointer + CTFPlayerShared_m_flDisguiseCompleteTime, GetGameTime() + 2.0); // Disguise time must always be 2 seconds.
+    WriteToValue(thisPointer + CTFPlayerShared_m_flDisguiseCompleteTime, GetGameTime() + 2.0);
     return MRES_Ignored;
 }
 
