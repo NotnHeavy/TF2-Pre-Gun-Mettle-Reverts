@@ -231,7 +231,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.4.5",
+    version = "1.4.6",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -1850,10 +1850,10 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
 
                 TF2Items_SetNumAttributes(newItem, 2);
             }
-            else if (index == 57) // Razorback. TODO: remove razorback ui.
+            else if (index == 57) // Razorback.
             {
                 // Remove old attributes.
-                TF2Items_SetAttribute(newItem, 1, 853, 1.00); // -0% maximum overheal on wearer
+                TF2Items_SetAttribute(newItem, 1, 800, 1.00); // -0% maximum overheal on wearer
 
                 TF2Items_SetNumAttributes(newItem, 2);
             }
@@ -2522,10 +2522,11 @@ public void OnEntityCreated(int entity, const char[] class)
 {
     if (entity <= MaxClients)
         return;
+    allEntities[entity].OriginalTF2ItemsIndex = -1;
     allEntities[entity].SpawnTimestamp = GetGameTime();
     strcopy(allEntities[entity].Class, MAX_NAME_LENGTH, class);
 
-    if (HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex")) // Any wearable.
+    if (HasEntProp(entity, Prop_Send, "m_iItemDefinitionIndex")) // Any econ entity.
     {
         // Hooks.
         if (StrContains(class, "tf_weapon") == 0) // Hooks restricted to weapons only.
@@ -2990,6 +2991,7 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
 {
     Action returnValue = Plugin_Continue;
     int index = GetWeaponIndex(weapon);
+    int inflictorIndex = IsValidEntity(inflictor) && HasEntProp(inflictor, Prop_Send, "m_hLauncher") ? GetWeaponIndex(GetEntPropEnt(inflictor, Prop_Send, "m_hLauncher")) : -1;
     int victimActiveWeapon = GetEntPropEnt(victim, Prop_Send, "m_hActiveWeapon");
     allPlayers[victim].HealthBeforeKill = GetClientHealth(victim);
 
@@ -2999,77 +3001,81 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
         returnValue = Plugin_Changed;
     }
 
+    // projectile-specific code
+    if (damagecustom == TF_CUSTOM_BASEBALL) // Sandman stun. The majority of this is sourced from the TF2 source code leak.
+    {
+        damage = 15.00; // Force the damage to always be 15.
+        allPlayers[victim].TicksSinceProjectileEncounter = 0;
+        TF2_RemoveCondition(victim, TFCond_Dazed); // TF2_StunPlayer just sets TFCond_Dazed again anyway.
+
+        // We have a more intense stun based on our travel time.
+        float flLifeTime = min(GetGameTime() - allEntities[allPlayers[victim].MostRecentProjectileEncounter].SpawnTimestamp, FLIGHT_TIME_TO_MAX_STUN);
+        float flLifeTimeRatio = flLifeTime / FLIGHT_TIME_TO_MAX_STUN;
+        if (flLifeTimeRatio > 0.1)
+        {
+            float flStun = 0.5;
+            float flStunDuration = GetConVarFloat(tf_scout_stunball_base_duration) * flLifeTimeRatio;
+            if (damagetype & DMG_CRIT)
+                flStunDuration += 2.0; // Extra two seconds of effect time if we're a critical hit.
+            int iStunFlags = TF_STUN_LOSER_STATE | TF_STUN_MOVEMENT;
+            if (flLifeTimeRatio >= 1.0)
+            {
+                flStunDuration += 1.0;
+                iStunFlags = TF_STUN_CONTROLS;
+                iStunFlags |= TF_STUN_SPECIAL_SOUND;
+            }
+
+            // Adjust stun amount and flags if we're hitting a boss or scaled enemy
+            if (GameModeUsesMiniBosses() && (GetEntProp(victim, Prop_Send, "m_bIsMiniBoss") || GetEntPropFloat(victim, Prop_Send, "m_flModelScale") > 1.0))
+            {
+                // If max range, freeze them in place - otherwise adjust it based on distance
+                flStun = flLifeTimeRatio >= 1.0 ? 1.0 : RemapValClamped( flLifeTimeRatio, 0.1, 0.99, 0.5, 0.75 );
+                iStunFlags = flLifeTimeRatio >= 1.0 ? ( TF_STUN_SPECIAL_SOUND | TF_STUN_MOVEMENT ) : TF_STUN_MOVEMENT; 
+            }
+
+            if (GetEntProp(victim, Prop_Send, "m_nWaterLevel") != WL_Eyes)
+                TF2_StunPlayer(victim, flStunDuration, flStun, iStunFlags, attacker);
+        }
+
+        returnValue = Plugin_Changed;
+    }
+    else if (damagecustom == TF_CUSTOM_CANNONBALL_PUSH) // Loose Cannon ball.
+    {
+        damage = 60.00;
+        returnValue = Plugin_Changed;
+    }
+    else if ((damagecustom == TF_CUSTOM_CLEAVER || damagecustom == TF_CUSTOM_CLEAVER_CRIT) && allPlayers[victim].TicksSinceProjectileEncounter == GetGameTickCount() && GetGameTime() - allEntities[allPlayers[victim].MostRecentProjectileEncounter].SpawnTimestamp >= 1) // Flying Guillotine mini-crit.
+        TF2_AddCondition(victim, TFCond_MarkedForDeathSilent, TICK_RATE_PRECISION);
+    else if ((inflictorIndex == 228 || inflictorIndex == 1085) && attacker != victim && TF2_GetClientTeam(attacker) != TF2_GetClientTeam(victim)) // Black Box hit.
+    {
+        // Show that attacker got healed.
+        Handle event = CreateEvent("player_healonhit", true);
+        SetEventInt(event, "amount", 15);
+        SetEventInt(event, "entindex", attacker);
+        FireEvent(event);
+
+        // Set health.
+        SetEntityHealth(attacker, intMin(GetClientHealth(attacker) + 15, allPlayers[attacker].MaxHealth));
+    }
+
+    // weapon-specific code
     if (IsValidEntity(weapon)) 
     {
         if (index == 415 && GetEntityFlags(victim) & (FL_ONGROUND | FL_INWATER) == 0 && allPlayers[attacker].FramesSinceLastSwitch < TICK_RATE * 5) // Reserve Shooter mini-crit. This only works if it hasn't been 5 seconds since equipping the Reserve Shooter.
             TF2_AddCondition(victim, TFCond_MarkedForDeathSilent, TICK_RATE_PRECISION, inflictor);
         if ((index == 228 || index == 1085) && attacker != victim && TF2_GetClientTeam(attacker) != TF2_GetClientTeam(victim)) // Black Box hit.
-        {
-            // Show that attacker got healed.
-            Handle event = CreateEvent("player_healonhit", true);
-            SetEventInt(event, "amount", 15);
-            SetEventInt(event, "entindex", attacker);
-            FireEvent(event);
-
-            // Set health.
-            SetEntityHealth(attacker, intMin(GetClientHealth(attacker) + 15, allPlayers[attacker].MaxHealth));
-        }
+        
         if (index == 127 && TF2_IsPlayerInCondition(victim, TFCond_BlastJumping)) // Direct Hit mini-crit on players thrown into air via explosion.
             TF2_AddCondition(victim, TFCond_MarkedForDeathSilent, TICK_RATE_PRECISION);
-        if (damagecustom == TF_CUSTOM_CANNONBALL_PUSH) // Loose Cannon ball.
-        {
-            damage = 60.00;
-            returnValue = Plugin_Changed;
-        }
         if (allPlayers[victim].TicksSinceHeadshot == GetGameTickCount() && (index == 61 || index == 1006)) // Ambassador headshot. TODO:
         {
-            // Although "damagetype |= DMG_USE_HITLOCATIONS" should work fine, ever since Jungle Inferno, this was changed to only actually crit within a specific range (0-1200 HU).
+            // You'd think that "damagetype |= DMG_USE_HITLOCATIONS" should work fine, but ever since Jungle Inferno, this was changed to only actually crit within a specific range (0-1200 HU).
             damagetype |= DMG_CRIT;
             returnValue = Plugin_Changed;
         }
         if (index == 460 && !TF2_IsPlayerInCondition(attacker, TFCond_Disguised)) // Enforcer 20% damage bonus while undisguised.
         {
             damage *= 1.20;
-            returnValue = Plugin_Changed;
-        }
-        if ((index == 812 || index == 833) && allPlayers[victim].TicksSinceProjectileEncounter == GetGameTickCount() && GetGameTime() - allEntities[allPlayers[victim].MostRecentProjectileEncounter].SpawnTimestamp >= 1) // Flying Guillotine mini-crit.
-            // mini-crit
-            TF2_AddCondition(victim, TFCond_MarkedForDeathSilent, TICK_RATE_PRECISION);
-        if (damagecustom == TF_CUSTOM_BASEBALL && index == 44) // Sandman stun. The majority of this is sourced from the TF2 source code leak.
-        {
-            damage = 15.00; // Force the damage to always be 15.
-            allPlayers[victim].TicksSinceProjectileEncounter = 0;
-            TF2_RemoveCondition(victim, TFCond_Dazed); // TF2_StunPlayer just sets TFCond_Dazed again anyway.
-
-            // We have a more intense stun based on our travel time.
-            float flLifeTime = min(GetGameTime() - allEntities[allPlayers[victim].MostRecentProjectileEncounter].SpawnTimestamp, FLIGHT_TIME_TO_MAX_STUN);
-            float flLifeTimeRatio = flLifeTime / FLIGHT_TIME_TO_MAX_STUN;
-            if (flLifeTimeRatio > 0.1)
-            {
-                float flStun = 0.5;
-                float flStunDuration = GetConVarFloat(tf_scout_stunball_base_duration) * flLifeTimeRatio;
-                if (damagetype & DMG_CRIT)
-                    flStunDuration += 2.0; // Extra two seconds of effect time if we're a critical hit.
-                int iStunFlags = TF_STUN_LOSER_STATE | TF_STUN_MOVEMENT;
-                if (flLifeTimeRatio >= 1.0)
-                {
-                    flStunDuration += 1.0;
-                    iStunFlags = TF_STUN_CONTROLS;
-                    iStunFlags |= TF_STUN_SPECIAL_SOUND;
-                }
-
-                // Adjust stun amount and flags if we're hitting a boss or scaled enemy
-                if (GameModeUsesMiniBosses() && (GetEntProp(victim, Prop_Send, "m_bIsMiniBoss") || GetEntPropFloat(victim, Prop_Send, "m_flModelScale") > 1.0))
-                {
-                    // If max range, freeze them in place - otherwise adjust it based on distance
-                    flStun = flLifeTimeRatio >= 1.0 ? 1.0 : RemapValClamped( flLifeTimeRatio, 0.1, 0.99, 0.5, 0.75 );
-                    iStunFlags = flLifeTimeRatio >= 1.0 ? ( TF_STUN_SPECIAL_SOUND | TF_STUN_MOVEMENT ) : TF_STUN_MOVEMENT; 
-                }
-
-                if (GetEntProp(victim, Prop_Send, "m_nWaterLevel") != WL_Eyes)
-                    TF2_StunPlayer(victim, flStunDuration, flStun, iStunFlags, attacker);
-            }
-
             returnValue = Plugin_Changed;
         }
         if (index == 442) // Righteous Bison damage. I doubt this is exact but it's still pretty accurate as far as I'm aware.
