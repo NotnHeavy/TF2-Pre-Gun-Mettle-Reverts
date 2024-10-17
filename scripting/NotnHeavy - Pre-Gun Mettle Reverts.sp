@@ -144,7 +144,6 @@ DHookSetup DHooks_CTFPlayerShared_CalcChargeCrit;
 DHookSetup DHooks_CTFPlayerShared_AddToSpyCloakMeter;
 //DHookSetup DHooks_CTFPlayerShared_Heal;
 DHookSetup DHooks_CTFPlayerShared_CanRecieveMedigunChargeEffect;
-DHookSetup DHooks_CTFPlayerShared_Disguise;
 DHookSetup DHooks_CTFWeaponBaseMelee_OnSwingHit;
 DHookSetup DHooks_CTFMinigun_SharedAttack;
 DHookSetup CTFWearable_CTFWearable_Break;
@@ -199,8 +198,11 @@ char MemoryPatch_FixYourEternalReward_OldValue[6];
 char MemoryPatch_FixYourEternalReward_NewValue[] = "\x90\x90\x90\x90\x90\x90";
 int MemoryPatch_FixYourEternalReward_NOPCount;
 
+Address MemoryPatch_DisguiseIsAlways2Seconds;
+Address MemoryPatch_DisguiseIsAlways2Seconds_OldValue;
+float MemoryPatch_DisguiseIsAlways2Seconds_NewValue = 2.00;
+
 Address CTFPlayerShared_m_pOuter;
-Address CTFPlayerShared_m_flDisguiseCompleteTime;
 Address CGameTrace_m_pEnt;
 Address CTakeDamageInfo_m_hAttacker;
 Address CTakeDamageInfo_m_flDamage;
@@ -231,7 +233,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.4.6",
+    version = "1.4.7",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -869,7 +871,6 @@ public void OnPluginStart()
     DHooks_CTFPlayerShared_AddToSpyCloakMeter = DHookCreateFromConf(config, "CTFPlayerShared::AddToSpyCloakMeter");
     //DHooks_CTFPlayerShared_Heal = DHookCreateFromConf(config, "CTFPlayerShared::Heal");
     DHooks_CTFPlayerShared_CanRecieveMedigunChargeEffect = DHookCreateFromConf(config, "CTFPlayerShared::CanRecieveMedigunChargeEffect");
-    DHooks_CTFPlayerShared_Disguise = DHookCreateFromConf(config, "CTFPlayerShared::Disguise");
     DHooks_CTFWeaponBaseMelee_OnSwingHit = DHookCreateFromConf(config, "CTFWeaponBaseMelee::OnSwingHit");
     DHooks_CTFMinigun_SharedAttack = DHookCreateFromConf(config, "CTFMinigun::SharedAttack");
     CTFWearable_CTFWearable_Break = DHookCreateFromConf(config, "CTFWearable::Break");
@@ -902,7 +903,6 @@ public void OnPluginStart()
     DHookEnableDetour(DHooks_CTFPlayerShared_AddToSpyCloakMeter, false, AddToCloak);
     //DHookEnableDetour(DHooks_CTFPlayerShared_Heal, false, HealPlayer);
     DHookEnableDetour(DHooks_CTFPlayerShared_CanRecieveMedigunChargeEffect, false, CheckIfPlayerCanBeUbered);
-    DHookEnableDetour(DHooks_CTFPlayerShared_Disguise, true, DisguisePlayer);
     DHookEnableDetour(DHooks_CTFWeaponBaseMelee_OnSwingHit, false, OnMeleeSwingHit);
     DHookEnableDetour(DHooks_CTFMinigun_SharedAttack, false, OnMinigunSharedAttack);
     DHookEnableDetour(CTFWearable_CTFWearable_Break, true, BreakRazorback);
@@ -994,9 +994,12 @@ public void OnPluginStart()
         StoreToAddress(MemoryPatch_FixYourEternalReward + index, MemoryPatch_FixYourEternalReward_NewValue[i], NumberType_Int8);
     }
 
+    MemoryPatch_DisguiseIsAlways2Seconds = GameConfGetAddress(config, "MemoryPatch_DisguiseIsAlways2Seconds") + view_as<Address>(GameConfGetOffset(config, "MemoryPatch_DisguiseIsAlways2Seconds"));
+    MemoryPatch_DisguiseIsAlways2Seconds_OldValue = LoadFromAddress(MemoryPatch_DisguiseIsAlways2Seconds, NumberType_Int32);
+    StoreToAddress(MemoryPatch_DisguiseIsAlways2Seconds, AddressOf(MemoryPatch_DisguiseIsAlways2Seconds_NewValue), NumberType_Int32);
+
     // Offsets.
     CTFPlayerShared_m_pOuter = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_pOuter"));
-    CTFPlayerShared_m_flDisguiseCompleteTime = view_as<Address>(GameConfGetOffset(config, "CTFPlayerShared::m_flDisguiseCompleteTime"));
     CGameTrace_m_pEnt = view_as<Address>(GameConfGetOffset(config, "CGameTrace::m_pEnt"));
     CTakeDamageInfo_m_hAttacker = view_as<Address>(40);
     CTakeDamageInfo_m_flDamage = view_as<Address>(48);
@@ -1117,6 +1120,7 @@ public void OnPluginEnd()
         Address index = view_as<Address>(i);
         StoreToAddress(MemoryPatch_FixYourEternalReward + index, MemoryPatch_FixYourEternalReward_OldValue[i], NumberType_Int8);
     }
+    StoreToAddress(MemoryPatch_DisguiseIsAlways2Seconds, MemoryPatch_DisguiseIsAlways2Seconds_OldValue, NumberType_Int32);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3961,20 +3965,6 @@ MRESReturn CheckIfPlayerCanBeUbered(Address thisPointer, DHookReturn returnValue
     int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
     returnValue.Value = CanReceiveMedigunChargeEffect(client, parameters.Get(1));
     return MRES_Supercede;
-}
-
-MRESReturn DisguisePlayer(Address thisPointer, DHookParam parameters)
-{
-    // Check if the client is holding the Your Eternal Reward. If so, 
-    // use the existing disguise time.
-    int client = GetEntityFromAddress(Dereference(thisPointer + CTFPlayerShared_m_pOuter));
-    if (DoesPlayerHaveItems(client, { 225, 574 }, 2))
-        return MRES_Ignored;
-
-    // Set the disguise time to 2 seconds.
-    SetEntProp(client, Prop_Send, "m_nDesiredDisguiseTeam", TF2_GetClientTeam(client) == TFTeam_Red ? TFTeam_Blue : TFTeam_Red); // Only get the player to disguise as the enemy team. Can't change it client-side :c
-    WriteToValue(thisPointer + CTFPlayerShared_m_flDisguiseCompleteTime, GetGameTime() + 2.0);
-    return MRES_Ignored;
 }
 
 MRESReturn ModifyRageMeter(Address thisPointer, DHookParam parameters)

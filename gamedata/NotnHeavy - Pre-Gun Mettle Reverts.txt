@@ -41,11 +41,22 @@
 			{
 				"windows"
 				{
-					"signature" "CTFPlayer::DisguiseOnKill()"
+					"signature" "CTFPlayer::DisguiseOnKill"
 				}
 				"linux"
 				{
-					"signature" "CTFPlayer::DisguiseOnKill()"
+					"signature" "CTFPlayer::DisguiseOnKill"
+				}
+			}
+			"MemoryPatch_DisguiseIsAlways2Seconds"
+			{
+				"windows"
+				{
+					"signature" "CTFPlayerShared::Disguise"
+				}
+				"linux"
+				{
+					"signature" "CTFPlayerShared::Disguise"
 				}
 			}
 		}
@@ -144,7 +155,7 @@
 				"windows" "\x55\x8B\xEC\x81\xEC\x80\x01\x00\x00\x56" // offset aBleedingDurati ; "bleeding_duration"
 				"linux"   "@_ZN9CTFPlayer18OnTakeDamage_AliveERK15CTakeDamageInfo"
 			}
-			"CTFPlayer::DisguiseOnKill()"
+			"CTFPlayer::DisguiseOnKill"
 			{
 				"library" "server"
 				"windows" "\x55\x8B\xEC\x51\x56\x8B\xF1\x8B\x96\x28\x08\x00\x00" // offset aDisguiseonkill ; "DisguiseOnKill", scroll down a bit and find "push offset sub_xxxxxxxx".
@@ -347,6 +358,12 @@
 				"linux"   "6"
 			}
 
+			"MemoryPatch_DisguiseIsAlways2Seconds" // look for the 0.5 near the end
+			{
+				"windows" "546"
+				"linux"   "528"
+			}
+
 			"GetRadius"
 			{
 				"windows" "243"
@@ -494,11 +511,6 @@
 			{
 				"windows" "396"
 				"linux"	  "396"
-			}
-			"CTFPlayerShared::m_flDisguiseCompleteTime"
-			{
-				"windows" "556"
-				"linux"   "556"
 			}
 
 			"CGameTrace::m_pEnt"
