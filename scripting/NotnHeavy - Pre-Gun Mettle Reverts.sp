@@ -233,7 +233,7 @@ public Plugin myinfo =
     name = PLUGIN_NAME,
     author = "NotnHeavy",
     description = "An attempt to revert weapon functionality to how they were pre-Gun Mettle, as accurately as possible.",
-    version = "1.4.7",
+    version = "1.4.8",
     url = "https://github.com/NotnHeavy/TF2-Pre-Gun-Mettle-Reverts"
 };
 
@@ -2064,10 +2064,6 @@ public Action TF2Items_OnGiveNamedItem(int client, char[] class, int index, Hand
         }
     }
 
-    // Skip if there are no changed attributes.
-    if (TF2Items_GetNumAttributes(newItem) == 1)
-        return Plugin_Continue;
-
     item = newItem;
     return Plugin_Changed;
 }
@@ -3006,7 +3002,7 @@ Action ClientDamaged(int victim, int& attacker, int& inflictor, float& damage, i
     }
 
     // projectile-specific code
-    if (damagecustom == TF_CUSTOM_BASEBALL) // Sandman stun. The majority of this is sourced from the TF2 source code leak.
+    if (damagecustom == TF_CUSTOM_BASEBALL && GetWeaponIndex(inflictor) == 44) // Sandman stun. The majority of this is sourced from the TF2 source code leak.
     {
         damage = 15.00; // Force the damage to always be 15.
         allPlayers[victim].TicksSinceProjectileEncounter = 0;
@@ -3393,7 +3389,7 @@ void AfterClientDamaged(int victim, int attacker, int inflictor, float damage, i
                 RequestFrame(RewardChargeOnChargeKill, attacker);
             if (index == 357) // Half-Zatoichi kill.
                 SetEntityHealth(attacker, allPlayers[attacker].MaxHealth);
-            if (index == 402 && TF2_IsPlayerInCondition(attacker, TFCond_Slowed)) // Do not gain two heads in one time. I don't wanna make yet another DHook so I'll just make this instead.
+            if (index == 402 && TF2_IsPlayerInCondition(attacker, TFCond_Slowed) && allPlayers[attacker].BazaarBargainShot == BazaarBargain_Gain) // Bazaar Bargain: do not gain two heads in one time. I don't wanna make yet another DHook so I'll just make this instead.
                 SetEntProp(attacker, Prop_Send, "m_iDecapitations", GetEntProp(attacker, Prop_Send, "m_iDecapitations") - 1);
         }
         if (index == 237 || index == 265) // Stop the Rocket Jumper/Sticky Jumper from damaging yourself.
