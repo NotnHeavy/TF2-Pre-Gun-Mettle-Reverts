@@ -19,7 +19,7 @@ I haven't reverted weapon models/weapon sounds at the moment either. The Rocket 
 
 ## Influences
 
-This plugin has been influenced not only by my somehow massive interest in TF2's old mechanics, but also by a plugin called Weapon Reverts by bakugo (https://forums.alliedmods.net/showthread.php?p=2717299). I really enjoyed playing on servers with this plugin, and I thought about writing my own historically-accurate plugin with as many reverts as possible. Thank you bakugo :).
+This plugin has been influenced not only by my somehow massive interest in TF2's old mechanics, but also by [a plugin called Weapon Reverts by bakugo](https://forums.alliedmods.net/showthread.php?p=2717299). I really enjoyed playing on servers with this plugin, and I thought about writing my own historically-accurate plugin with as many reverts as possible. Thank you bakugo :).
 
 ## Dependencies:
 - My old flamethrower mechanics plugin. Previously, flamethrower-related functionality was included in this plugin, but has now been moved to [here](https://github.com/NotnHeavy/TF2-Old-Flamethrower-Mechanics). 
