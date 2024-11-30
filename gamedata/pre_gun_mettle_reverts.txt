@@ -59,6 +59,39 @@
 					"signature" "CTFPlayerShared::Disguise"
 				}
 			}
+			"MemoryPatch_DontMakeWrapAssassinBallExplode"
+			{
+				"windows"
+				{
+					"signature"	"CTFBall_Ornament::Explode"
+				}
+				"linux"
+				{
+					"signature"	"CTFBall_Ornament::Explode"
+				}
+			}
+			"MemoryPatch_DontBuildUberFasterInSetup"
+			{
+				"windows"
+				{
+					"signature" "CWeaponMedigun::FindAndHealTargets"
+				}
+				"linux"
+				{
+					"signature" "CWeaponMedigun::FindAndHealTargets"
+				}
+			}
+			"MemoryPatch_DontDoubleRegenIfHealingHurtTarget"
+			{
+				"windows"
+				{
+					"signature" "CTFPlayer::RegenThink"
+				}
+				"linux"
+				{
+					"signature" "CTFPlayer::RegenThink"
+				}
+			}
 		}
 		"Signatures"
 		{
@@ -261,13 +294,6 @@
 				"linux"   "@_ZN16CTFWeaponBaseGun19GetProjectileDamageEv"
 			}
 
-			"CTFMinigun::SharedAttack" // offset aUsesAmmoWhileA ; "uses_ammo_while_aiming"
-			{
-				"library" "server"
-				"windows" "\x55\x8B\xEC\x83\xEC\x30\x53\x57\x8B\xF9\xE8\x2A\x2A\x2A\x2A"
-				"linux"    "@_ZN10CTFMinigun12SharedAttackEv"
-			}
-
 			"CTFLunchBox::ApplyBiteEffects" // offset aLunchboxHealin ; "lunchbox_healing_scale"
 			{
 				"library" "server"
@@ -286,6 +312,13 @@
 				"library" "server"
 				"windows" "\x55\x8B\xEC\x83\xEC\x24\x53\x56\x8B\xF1\x8B\x8E\x10\x02\x00\x00"
 				"linux"   "@_ZN14CWeaponMedigun18FindAndHealTargetsEv"
+			}
+
+			"CTFBall_Ornament::Explode" // "xms_ornament_smash_red"
+			{
+				"library" "server"
+				"windows" "\x55\x8B\xEC\x81\xEC\x34\x01\x00\x00\x53\x56\x8B\xF1\x57\x8B\x8E\x10\x02\x00\x00"
+				"linux"   "@_ZN16CTFBall_Ornament7ExplodeEP10CGameTracei"
 			}
 
 			"CBaseObject::OnConstructionHit" // offset aNutsnboltsBuil ; "nutsnbolts_build", don't use precache subroutine
@@ -364,22 +397,30 @@
 				"linux"   "528"
 			}
 
+			"MemoryPatch_DontMakeWrapAssassinBallExplode_StackAdd"
+			{
+				"windows" "8"
+				"linux"   "0"
+			}
+
+			"MemoryPatch_DontBuildUberFasterInSetup"
+			{
+				"windows" "1168"
+				"linux"   "1540"
+			}
+			
+			"MemoryPatch_DontDoubleRegenIfHealingHurtTarget"
+			{
+				"windows" "241"
+				"linux"   "1344"
+			}
+
 			"GetRadius"
 			{
 				"windows" "243"
 				"linux"   "244"
 			}
 
-			"CTFWeaponBase::FinishReload"
-			{
-				"windows" "281"
-				"linux"   "287"
-			}
-			"CTFWeaponBase::Reload"
-			{
-				"windows" "283"
-				"linux"   "289"
-			}
 			"CTFWeaponBase::PrimaryAttack"
 			{
 				"windows" "286"
@@ -410,12 +451,6 @@
 			{
 				"windows" "495"
 				"linux"   "502"
-			}
-
-			"CTFBall_Ornament::Explode"
-			{
-				"windows" "235"
-				"linux"   "236"
 			}
 
 			"CTFPlayer::EquipWearable"
@@ -483,11 +518,6 @@
 				"windows" "349"
 				"linux"   "351"
 			}
-			"CBaseObject::GetType"
-			{
-				"windows" "357"
-				"linux"   "359"
-			}
 			
 			"CObjectSapper::FinishedBuilding"
 			{
@@ -528,20 +558,6 @@
 				"this"     "entity"
 				"return"   "float"
 			}
-			"CTFWeaponBase::FinishReload"
-			{
-				"offset"   "CTFWeaponBase::FinishReload"
-				"hooktype" "entity"
-				"this"     "entity"
-				"return"   "void"
-			}
-			"CTFWeaponBase::Reload"
-			{
-				"offset"   "CTFWeaponBase::Reload"
-				"hooktype" "entity"
-				"this"     "entity"
-				"return"   "void"
-			}
 			"CTFWeaponBase::PrimaryAttack"
 			{
 				"offset"   "CTFWeaponBase::PrimaryAttack"
@@ -576,24 +592,6 @@
 				"hooktype" "entity"
 				"this"     "entity"
 				"return"   "float"
-			}
-			"CTFBall_Ornament::Explode"
-			{
-				"offset"   "CTFBall_Ornament::Explode"
-				"hooktype" "entity"
-				"this"     "entity"
-				"return"   "void"
-				"arguments"
-				{
-					"pTrace"
-					{
-						"type" "cbaseentity"
-					}
-					"bitsDamageType"
-					{
-						"type" "int"
-					}
-				}
 			}
 			"CAmmoPack::MyTouch"
 			{
@@ -811,13 +809,6 @@
 						"type" "int"
 					}
 				}
-			}
-			"CTFPlayer::RegenThink"
-			{
-				"signature" "CTFPlayer::RegenThink"
-				"callconv"  "thiscall"
-				"this"      "entity"
-				"return"    "void"
 			}
 			"CTFPlayer::MedicGetHealTarget"
 			{
@@ -1061,13 +1052,6 @@
 					}
 				}
 			}
-			"CTFMinigun::SharedAttack"
-			{
-				"signature" "CTFMinigun::SharedAttack"
-				"callconv"  "thiscall"
-				"this"      "entity"
-				"return"    "void"
-			}
 			"CTFWearable::Break"
 			{
 				"signature" "CTFWearable::Break"
@@ -1134,13 +1118,6 @@
 						"type" "bool"
 					}
 				}
-			}
-			"CWeaponMedigun::FindAndHealTargets"
-			{
-				"signature" "CWeaponMedigun::FindAndHealTargets"
-				"callconv"  "thiscall"
-				"this"      "entity"
-				"return"    "bool"
 			}
 			"CBaseObject::OnConstructionHit"
 			{
